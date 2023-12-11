@@ -1,6 +1,6 @@
 # OpenGL_GameEngineProject
-OpenGL_GameEngineProject
-[github.com/user/project/releases/latest/download/install.exe](https://github.com/enopid/OpenGL_GameEngineProject/releases/download/release/exe.zip)
+- OpenGL_GameEngineProject
+- [download link](https://github.com/enopid/OpenGL_GameEngineProject/releases/download/release/exe.zip)
 ## 기본 설명
     - cmd창에 현재 모드에 대한 정보가 표시됩니다.
 
