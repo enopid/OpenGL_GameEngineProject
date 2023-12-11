@@ -8,7 +8,7 @@ OpenGL_GameEngineProject
     - 모드 2 - 복수 오브젝트 metalness/roughness example
     - 모드 3 - 램프모델 PBR map 구현 example
  
-- 공통 조작방법-
+- 공통 조작방법
     - tab - 모드변경
     - 마우스 - 시점조작
     - Q/E - 현재 시점에서 위아래 이동
