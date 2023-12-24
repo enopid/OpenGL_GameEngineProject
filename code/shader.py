@@ -1,8 +1,6 @@
 from OpenGL.GL import *
 import textwrap
 
-
-
 vertex_shader_source = """
     #version 330 core
     //uniform - 글로벌변수(기본적으로 잘 변하지않는값 매질,광원, 시간) - 쉐이더내 변경불가 / glGetUniformLocation-위치생성리턴 / gluniform-값변경
@@ -124,7 +122,7 @@ fragment_shader_source2 ="""
     uniform vec3 uLightColor;
     uniform vec3 uCameraPos;
 
-    uniform float IOR;
+    uniform float uIOR;
 
     varying vec2 vTexCoord;             
     varying vec3 vNormal;    
@@ -154,7 +152,7 @@ fragment_shader_source2 ="""
         float dr = (1.0-metalness);
         float rd = nol*dr/pi;
                                             
-        float F0=pow((1.0-IOR)/(1.0+IOR),2);        
+        float F0=pow((1.0-uIOR)/(1.0+uIOR),2);        
         float F=F0+(1.0-F0)*pow((1-hov),5);
                                             
         float D=pow(roughness,4)/(pi*pow((pow(noh,2)*(pow(roughness,4)-1.0)+1.0),2));
@@ -335,3 +333,37 @@ def initlightprogram():
     glEnableVertexAttribArray(1)
     glEnableVertexAttribArray(2)
     return program
+
+class Program:
+    def __init__(self,program):
+        self.program=program
+        self.lightslocation=[]
+
+        self.cameralocation=None
+        self.MVMatrixlocation=None
+        self.PMatrixlocation=None
+
+        self.metalnesslocation=None
+        self.roughnesslocation=None
+        self.IORlocation=None
+    
+    def InitLight(self):
+        self.lightslocation=[]
+        for i in range(4):
+            temp=[]
+            temp.append(glGetUniformLocation(self.program, "uLights[{}].position".format(i)))
+            temp.append(glGetUniformLocation(self.program, "uLights[{}].color".format(i)))
+            self.lightslocation.append(temp)
+
+    def InitCamera(self):
+        self.cameralocation = glGetUniformLocation(self.program, "uCameraPos")
+        self.MVMatrixlocation = glGetUniformLocation(self.program, "uMVMatrix")
+        self.PMatrixlocation = glGetUniformLocation(self.program, "uPMatrix")
+
+    def InitMaterial(self):
+        self.metalnesslocation = glGetUniformLocation(self.program, "umetalness")
+        self.roughnesslocation = glGetUniformLocation(self.program, "uroughness")
+        self.IORlocation = glGetUniformLocation(self.program, "uIOR")
+
+    def InitTexture(self):
+        1
