@@ -28,42 +28,29 @@ program2.InitLight()
 program2.InitCamera()
 program2.InitMaterial()
 
-lightprogram = shader.initlightprogram()
+program3 = shader.Program(shader.initprogram1())
+program3.InitLight()
+program3.InitCamera()
+program3.InitMaterial()
+program3.InitTexture()
 
-program3 = shader.initprogram3()
+lightprogram = shader.Program(shader.initlightprogram())
+lightprogram.InitLight()
+lightprogram.InitCamera()
 
 PBRtexture = load_texture("./texture/image.png")
 texture = load_texture("./texture/lamp.png")
-    
+
+glActiveTexture(GL_TEXTURE0)
+glBindTexture(GL_TEXTURE_2D, PBRtexture)
+
+glActiveTexture(GL_TEXTURE1)
+glBindTexture(GL_TEXTURE_2D, texture)
+
 object1 = OBJ("./model/testsphere2.obj", swapyz=False)
 object2 = OBJ("./model/testsphere1.obj", swapyz=False)
 object3 = OBJ("./model/lamp.obj", swapyz=False)
 lightobj = OBJ("./model/light.obj", swapyz=False)
-
-sTexture3 = glGetUniformLocation(program3, "sTexture")
-sPBRTexture3 = glGetUniformLocation(program3, "sTexture")
-uMVMatrix3 = glGetUniformLocation(program3, "uMVMatrix")
-uPMatrix3 = glGetUniformLocation(program3, "uPMatrix")
-ulights3=[]
-for i in range(4):
-    temp=[]
-    temp.append(glGetUniformLocation(program3, "uLights[{}].position".format(i)))
-    temp.append(glGetUniformLocation(program3, "uLights[{}].color".format(i)))
-    ulights3.append(temp)
-uCameraPos3 = glGetUniformLocation(program3, "uCameraPos")
-
-uMVMatrix_l = glGetUniformLocation(lightprogram, "uMVMatrix")
-uPMatrix_l = glGetUniformLocation(lightprogram, "uPMatrix")
-uLightColor_l = glGetUniformLocation(lightprogram, "uLightColor")
-
-glActiveTexture(GL_TEXTURE0)
-glBindTexture(GL_TEXTURE_2D, PBRtexture)
-glUniform1i(sPBRTexture3, 0)
-
-glActiveTexture(GL_TEXTURE1)
-glBindTexture(GL_TEXTURE_2D, texture)
-glUniform1i(sTexture3, 1)
-
 
 glViewport(0, 0, width, height)
 
@@ -88,9 +75,9 @@ class EditorMode:
         self.viewvector=[0,0,1]
         self.upvector=[0,1,0]
         self.rightvector=[1,0,0]
-        self.xpos = 0
-        self.ypos = 0
-        self.zpos = 10
+        self.camerapos = [0,0,0]
+        self.rotate = self.move = False
+        self.sensitivity=0.2;
 
         self.metarialproperties=MaterialProperties()
         self.lights=lights()
@@ -120,39 +107,39 @@ class EditorMode:
         glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 0, self.obj.normals)
         glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, 0, self.obj.texcoords)
 
-        self.view_matrix=view((self.xpos,self.ypos,self.zpos),self.rightvector,self.upvector,self.viewvector)
+        self.view_matrix=view(self.camerapos,self.rightvector,self.upvector,self.viewvector)
         self.model_matrix = np.identity(4, dtype=np.float32)
         mv_matrix = np.dot(self.model_matrix, self.view_matrix)
         
         glUniformMatrix4fv(self.program.MVMatrixlocation, 1, GL_FALSE, mv_matrix)
         glUniformMatrix4fv(self.program.PMatrixlocation, 1, GL_FALSE, self.projection_matrix)
 
-        for _material in self.metarialproperties.materiallist:
-            glUniform1f(_material.location,_material.value)
-
         for i in range(self.lights.lightnum):
             light=self.lights.lightlist[i]
             glUniform3fv(self.program.lightslocation[i][0],1,light.pos)
             glUniform3fv(self.program.lightslocation[i][1],1,light.color)
 
-        glUniform3f(self.program.cameralocation,self.xpos,self.ypos,self.zpos)
+        for _material in self.metarialproperties.materiallist:
+            glUniform1f(_material.location,_material.value)
+
+        glUniform3fv(self.program.cameralocation, 1, self.camerapos)
 
         glDrawArrays(GL_TRIANGLES, 0, len(self.obj.vertices))
     
     def lightsetting(self):
-        glUseProgram(lightprogram)
+        glUseProgram(lightprogram.program)
         glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 0, self.lightobj.vertices)
 
-        self.view_matrix=view((self.xpos,self.ypos,self.zpos),self.rightvector,self.upvector,self.viewvector)
+        self.view_matrix=view(self.camerapos,self.rightvector,self.upvector,self.viewvector)
         for i in range(self.lights.lightnum):
             light=self.lights.lightlist[i]
             
             self.model_matrix=translate(light.pos)
             mv_matrix = np.dot(self.model_matrix, self.view_matrix)
-            glUniformMatrix4fv(uMVMatrix_l, 1, GL_FALSE, mv_matrix)
-            glUniformMatrix4fv(uPMatrix_l, 1, GL_FALSE, self.projection_matrix)
+            glUniformMatrix4fv(lightprogram.MVMatrixlocation, 1, GL_FALSE, mv_matrix)
+            glUniformMatrix4fv(lightprogram.PMatrixlocation, 1, GL_FALSE, self.projection_matrix)
 
-            glUniform3f(uLightColor_l,light.color[0],light.color[1],light.color[2])
+            glUniform3fv(lightprogram.lightslocation[i][1],1,light.color)
 
             glDrawArrays(GL_TRIANGLES, 0, len(self.lightobj.vertices))
 
@@ -178,29 +165,29 @@ class EditorMode:
         self.rightvector=rotation_Y(-self.rx,self.rightvector)
 
         if keys[pygame.K_w]:
-            self.xpos-=self.viewvector[0]*self.sensitivity
-            self.ypos-=self.viewvector[1]*self.sensitivity
-            self.zpos-=self.viewvector[2]*self.sensitivity
+            self.camerapos[0]-=self.viewvector[0]*self.sensitivity
+            self.camerapos[1]-=self.viewvector[1]*self.sensitivity
+            self.camerapos[2]-=self.viewvector[2]*self.sensitivity
         elif keys[pygame.K_s]:
-            self.xpos+=self.viewvector[0]*self.sensitivity
-            self.ypos+=self.viewvector[1]*self.sensitivity
-            self.zpos+=self.viewvector[2]*self.sensitivity
+            self.camerapos[0]+=self.viewvector[0]*self.sensitivity
+            self.camerapos[1]+=self.viewvector[1]*self.sensitivity
+            self.camerapos[2]+=self.viewvector[2]*self.sensitivity
         if keys[pygame.K_a]:
-            self.xpos-=self.rightvector[0]*self.sensitivity
-            self.ypos-=self.rightvector[1]*self.sensitivity
-            self.zpos-=self.rightvector[2]*self.sensitivity
+            self.camerapos[0]-=self.rightvector[0]*self.sensitivity
+            self.camerapos[1]-=self.rightvector[1]*self.sensitivity
+            self.camerapos[2]-=self.rightvector[2]*self.sensitivity
         elif keys[pygame.K_d]:
-            self.xpos+=self.rightvector[0]*self.sensitivity
-            self.ypos+=self.rightvector[1]*self.sensitivity
-            self.zpos+=self.rightvector[2]*self.sensitivity
+            self.camerapos[0]+=self.rightvector[0]*self.sensitivity
+            self.camerapos[1]+=self.rightvector[1]*self.sensitivity
+            self.camerapos[2]+=self.rightvector[2]*self.sensitivity
         if keys[pygame.K_q]:
-            self.xpos+=self.upvector[0]*self.sensitivity
-            self.ypos+=self.upvector[1]*self.sensitivity
-            self.zpos+=self.upvector[2]*self.sensitivity
+            self.camerapos[0]+=self.upvector[0]*self.sensitivity
+            self.camerapos[1]+=self.upvector[1]*self.sensitivity
+            self.camerapos[2]+=self.upvector[2]*self.sensitivity
         elif keys[pygame.K_e]:
-            self.xpos-=self.upvector[0]*self.sensitivity
-            self.ypos-=self.upvector[1]*self.sensitivity
-            self.zpos-=self.upvector[2]*self.sensitivity
+            self.camerapos[0]-=self.upvector[0]*self.sensitivity
+            self.camerapos[1]-=self.upvector[1]*self.sensitivity
+            self.camerapos[2]-=self.upvector[2]*self.sensitivity
 
     def mousemove(self, keyevent):
         if keyevent.type == MOUSEBUTTONDOWN:
@@ -218,29 +205,22 @@ class ObjectMode1(EditorMode):
     def __init__(self, object, lightobj, program):
         super().__init__(object, lightobj, program)
         self.rx, self.ry = (0,0)
-        self.tx, self.ty = (0,0)
-        self.xpos = 0
-        self.ypos = 0
-        self.zpos = 10
-        self.rotate = self.move = False
+        self.camerapos = [0,0,10]
 
-        self.lights.addlight(light([5.0, 12.0, 5.0],[1,1,1]))
-        self.lights.addlight(light([-5.0, 12.0, 5.0],[1,1,1]))
-        self.lights.addlight(light([-5.0, 12.0, -5.0],[1,1,1]))
-        self.lights.addlight(light([5.0, 12.0, 5.0],[1,1,1]))
+        self.lights.addlight(light([5.0, 12.0, 5.0],[1,0,0]))
+        self.lights.addlight(light([-5.0, 12.0, 5.0],[0,1,0]))
+        self.lights.addlight(light([-5.0, 12.0, -5.0],[0,0,1]))
+        self.lights.addlight(light([5.0, 12.0, -5.0],[1,1,1]))
 
         self.metarialproperties.addmeterial(MaterialProperty("roughness",0.01,0.01,0.99).bind(self.program.roughnesslocation))
         self.metarialproperties.addmeterial(MaterialProperty("metalness",0.01,0.01,0.99).bind(self.program.metalnesslocation))
         self.metarialproperties.addmeterial(MaterialProperty("IOR",2.0,0.01,10.0).bind(self.program.IORlocation))
 
-        self.sensitivity=0.2;
 
     def HandlingInput(self, keyevent):
         keys=super().HandlingInput(keyevent)
-
         self.mousemove(keyevent)
         self.cameramove(keys)
-
         if keyevent.type == KEYDOWN and keyevent.key == pygame.K_SPACE:
             self.metarialproperties.next()
             self.printstate()        
@@ -255,6 +235,10 @@ class ObjectMode1(EditorMode):
         super().Rendering()
         self.RenderObjcet()
         self.lightsetting()  
+        
+    def RenderObjcet(self):
+        super().RenderObjcet()
+        glDrawArrays(GL_TRIANGLES, 0, len(self.obj.vertices))
 
     def printstate(self):
         super().printstate()
@@ -270,14 +254,12 @@ class ObjectMode2(EditorMode):
     def __init__(self, object, lightobj, program):
         super().__init__(object, lightobj, program)
         self.rx, self.ry = (180,45)
-        self.xpos = 0
-        self.ypos = 20
-        self.zpos = -20
+        self.camerapos = [0,20,-20]
         self.rotate = self.move = False
         
-        self.lights.addlight(light([20.0, 50.0, 20.0],[1,1,1]))
-        self.lights.addlight(light([-20.0, 50.0, 20.0],[1,1,1]))
-        self.lights.addlight(light([-20.0, 50.0, -20.0],[1,1,1]))
+        self.lights.addlight(light([20.0, 50.0, 20.0],[1,0,0]))
+        self.lights.addlight(light([-20.0, 50.0, 20.0],[0,0,1]))
+        self.lights.addlight(light([-20.0, 50.0, -20.0],[0,1,0]))
         self.lights.addlight(light([20.0, 50.0, -20.0],[1,1,1]))
 
         self.metarialproperties.addmeterial(MaterialProperty("IOR",2.0,0.01,10.0).bind(self.program.IORlocation))
@@ -308,27 +290,7 @@ class ObjectMode2(EditorMode):
         self.lightsetting()  
 
     def RenderObjcet(self):
-        glUseProgram(self.program.program)
-        glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 0, self.obj.vertices)
-        glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 0, self.obj.normals)
-        glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, 0, self.obj.texcoords)
-
-        self.view_matrix=view((self.xpos,self.ypos,self.zpos),self.rightvector,self.upvector,self.viewvector)
-        self.model_matrix = np.identity(4, dtype=np.float32)
-        mv_matrix = np.dot(self.model_matrix, self.view_matrix)
-
-        glUniformMatrix4fv(self.program.MVMatrixlocation, 1, GL_FALSE, mv_matrix)
-        glUniformMatrix4fv(self.program.PMatrixlocation, 1, GL_FALSE, self.projection_matrix)
-
-        for _material in self.metarialproperties.materiallist:
-            glUniform1f(_material.location,_material.value)
-
-        for i in range(self.lights.lightnum):
-            light=self.lights.lightlist[i]
-            glUniform3fv(self.program.lightslocation[i][0],1,light.pos)
-            glUniform3fv(self.program.lightslocation[i][1],1,light.color)
-
-        glUniform3f(self.program.cameralocation,self.xpos,self.ypos,self.zpos)
+        super().RenderObjcet()
 
         glDrawArrays(GL_TRIANGLES, 0, len(self.obj.vertices))
 
@@ -349,9 +311,7 @@ class ObjectMode3(EditorMode):
     def __init__(self, object, lightobj, program):
         super().__init__(object, lightobj, program)
         self.rx, self.ry = (180,45)
-        self.xpos = 0
-        self.ypos = 20
-        self.zpos = -20
+        self.camerapos = [0,20,-20]
         self.rotate = self.move = False
         
         self.lights.addlight(light([10.0, 10.0, 10.0],[1,1,1]))
@@ -359,14 +319,10 @@ class ObjectMode3(EditorMode):
         self.lights.addlight(light([-10.0, 10.0, -10.0],[1,1,1]))
         self.lights.addlight(light([10.0, 0.0, -10.0],[1,1,1]))
 
-        self.sensitivity=0.2;
-
     def HandlingInput(self, keyevent):
         keys=super().HandlingInput(keyevent)
-        
         self.cameramove(keys)
         self.mousemove(keyevent)
-
         if keyevent.type == KEYDOWN and keyevent.key == pygame.K_SPACE:
             self.printstate()    
 
@@ -376,24 +332,9 @@ class ObjectMode3(EditorMode):
         self.lightsetting()  
 
     def RenderObjcet(self):
-        glUseProgram(self.program)
-        glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 0, self.obj.vertices)
-        glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 0, self.obj.normals)
-        glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, 0, self.obj.texcoords)
-
-        self.view_matrix=view((self.xpos,self.ypos,self.zpos),self.rightvector,self.upvector,self.viewvector)
-        self.model_matrix = np.identity(4, dtype=np.float32)
-        mv_matrix = np.dot(self.model_matrix, self.view_matrix)
-        glUniformMatrix4fv(uMVMatrix3, 1, GL_FALSE, mv_matrix)
-        glUniformMatrix4fv(uPMatrix3, 1, GL_FALSE, self.projection_matrix)
-
-        for i in range(self.lights.lightnum):
-            light=self.lights.lightlist[i]
-            glUniform3fv(ulights3[i][0],1,light.pos)
-            glUniform3fv(ulights3[i][1],1,light.color)
-
-        glUniform3f(uCameraPos3,self.xpos,self.ypos,self.zpos)
-
+        super().RenderObjcet()
+        glUniform1i(self.program.PBRtexturelocation, 0)
+        glUniform1i(self.program.albedotexturelocation, 1)
         glDrawArrays(GL_TRIANGLES, 0, len(self.obj.vertices))
 
     def printstate(self):
