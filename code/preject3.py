@@ -139,7 +139,7 @@ class EditorMode:
             glUniformMatrix4fv(lightprogram.MVMatrixlocation, 1, GL_FALSE, mv_matrix)
             glUniformMatrix4fv(lightprogram.PMatrixlocation, 1, GL_FALSE, self.projection_matrix)
 
-            glUniform3fv(lightprogram.lightslocation[i][1],1,light.color)
+            glUniform3fv(lightprogram.lightslocation[0][1],1,light.color)
 
             glDrawArrays(GL_TRIANGLES, 0, len(self.lightobj.vertices))
 

@@ -79,19 +79,7 @@ fragment_shader_source1 ="""
                             
     }
 
-    vec3 PBR(vec3 lightColor, vec3 lightPos){
-        vec3 vLight=normalize(lightPos - vVertexPos);
-        vec3 vView=normalize(uCameraPos - vVertexPos);
-        vec3 vHalf=normalize(vLight+vView); 
-                           
-        float hov = max(dot(vHalf,vView),0.0001);
-        float noh = max(dot(vNormal,vHalf),0.0001);
-        float nov = max(dot(vNormal,vView),0.0001);
-        float nol = max(dot(vNormal, vLight),0.0001);
-                                            
-        float dr = (1.0-metalness);
-        float rd = nol*dr/pi;
-                                            
+    float cooktorrance(float hov,float noh,float nov,float nol){     
         float F0=pow((1.0-IOR)/(1.0+IOR),2);        
         float F=F0+(1.0-F0)*pow((1-hov),5);
                                             
@@ -101,18 +89,41 @@ fragment_shader_source1 ="""
         float G1=nol/(nol*(1.0-k)+k);         
         float G2=nov/(nov*(1.0-k)+k);
         float G=G1*G2;
-                                            
-        float rs=F*D*G/(4.0*nol*nov); 
+                        
+        return F*D*G/(4.0*nol*nov); 
+    }
 
-        return (1.0-F)*rd*basecolor*lightColor+rs*lightColor;
+    vec3 lambertian(float hov,float noh,float nov,float nol){                 
+        float dr = (1.0-metalness);
+
+        return dr*basecolor/pi;
+    }
+
+    vec3 PBR(vec3 lightColor, vec3 lightPos){
+        vec3 vLight=normalize(lightPos - vVertexPos);
+        vec3 vView=normalize(uCameraPos - vVertexPos);
+        vec3 vHalf=normalize(vLight+vView); 
+                           
+        float hov = max(dot(vHalf,vView),0.0001);
+        float noh = max(dot(vNormal,vHalf),0.0001);
+        float nov = max(dot(vNormal,vView),0.0001);
+        float nol = max(dot(vNormal, vLight),0.0001);
+                                     
+        vec3 rd = lambertian(hov,noh,nov,nol);
+
+        float rs = cooktorrance(hov,noh,nov,nol); 
+
+        return (rd*lightColor+rs*lightColor)*nol;
     }          
 
     void main(){    
         init();      
         vec3 result=vec3(0.0, 0.0, 0.0);
+
         for(int i = 0; i < NUM_LIGHTS; i++)
             result += PBR(uLights[i].color,uLights[i].position);  
         result += basecolor*ra;
+
        gl_FragColor = vec4(result,1.0);
     }
     """
