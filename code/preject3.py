@@ -22,6 +22,7 @@ program1 = shader.Program(shader.initprogram1())
 program1.InitLight()
 program1.InitCamera()
 program1.InitMaterial()
+program1.InitSkyBox()
 
 program2 = shader.Program(shader.initprogram2())
 program2.InitLight()
@@ -34,12 +35,23 @@ program3.InitCamera()
 program3.InitMaterial()
 program3.InitTexture()
 
+program4 = shader.Program(shader.initprogram3())
+program4.InitLight()
+program4.InitCamera()
+program4.InitMaterial()
+program4.InitSkyBox()
+
 lightprogram = shader.Program(shader.initlightprogram())
 lightprogram.InitLight()
 lightprogram.InitCamera()
 
+skyboxprogram = shader.Program(shader.initSkyboxprogram())
+skyboxprogram.InitSkyBox()
+skyboxprogram.InitCamera()
+
 PBRtexture = load_texture("./texture/image.png")
 texture = load_texture("./texture/lamp.png")
+skybox = load_skycube_texture("./skybox")
 
 glActiveTexture(GL_TEXTURE0)
 glBindTexture(GL_TEXTURE_2D, PBRtexture)
@@ -47,14 +59,20 @@ glBindTexture(GL_TEXTURE_2D, PBRtexture)
 glActiveTexture(GL_TEXTURE1)
 glBindTexture(GL_TEXTURE_2D, texture)
 
+glBindTexture(GL_TEXTURE_CUBE_MAP, skybox)
+
 object1 = OBJ("./model/testsphere2.obj", swapyz=False)
 object2 = OBJ("./model/testsphere1.obj", swapyz=False)
 object3 = OBJ("./model/lamp.obj", swapyz=False)
+skyboxobj = OBJ("./model/cube.obj", swapyz=False)
 lightobj = OBJ("./model/light.obj", swapyz=False)
 
 glViewport(0, 0, width, height)
 
 glEnable(GL_DEPTH_TEST)
+glEnable(GL_DEBUG_OUTPUT)
+
+skyboxvertices=[]
 
 class EditorMode:
     EditormodeIndex=0
@@ -143,11 +161,24 @@ class EditorMode:
 
             glDrawArrays(GL_TRIANGLES, 0, len(self.lightobj.vertices))
 
+    def skyboxsetting(self):
+        glUseProgram(skyboxprogram.program)
+        glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 0, skyboxobj.vertices)
+
+        self.view_matrix=view([0,0,0],self.rightvector,self.upvector,self.viewvector)
+        self.model_matrix = np.identity(4, dtype=np.float32)
+        mv_matrix = np.dot(self.model_matrix, self.view_matrix)
+
+        glUniformMatrix4fv(skyboxprogram.MVMatrixlocation, 1, GL_FALSE, mv_matrix)
+        glUniformMatrix4fv(skyboxprogram.PMatrixlocation, 1, GL_FALSE, self.projection_matrix)
+
+        glDrawArrays(GL_QUADS, 0, len(skyboxobj.vertices))
+
     def Process(self):
         for e in pygame.event.get():
             self.HandlingInput(e)
         self.Rendering()
-        self.lightsetting()
+        self.skyboxsetting()
         pygame.display.flip()
 
     def printstate(self):
@@ -345,6 +376,7 @@ class ObjectMode3(EditorMode):
 ObjectMode1(object1,lightobj,program1)
 ObjectMode2(object2,lightobj,program2)
 ObjectMode3(object3,lightobj,program3)
+ObjectMode1(object1,lightobj,program4)
         
 clock = pygame.time.Clock()
 EditorMode.currentEditormode.printstate()
