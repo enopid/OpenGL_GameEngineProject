@@ -16,7 +16,7 @@ vertex_shader_source = """
     void main(){
        vTexCoord = aTexCoord;
        vVertexPos=aVertex;
-       vNormal=aNormal;                
+       vNormal=normalize(aNormal);                
                                        
        gl_Position = (uPMatrix * uMVMatrix)  * vec4(aVertex, 1.0);
     }
@@ -289,6 +289,7 @@ fragment_shader_source3 ="""
     vec4 skyboxcolor;
     vec3 basecolor = vec3(0.9529, 0.7882, 0.4078);             
     float ra=0.1;  
+    #define epsilon 0.000000000000000000001
     
     void init(){     
         /*                   
@@ -308,6 +309,7 @@ fragment_shader_source3 ="""
         float F=F0+(1.0-F0)*pow((1-hov),5);
                                             
         float D=pow(roughness,4)/(pi*pow((pow(noh,2)*(pow(roughness,4)-1.0)+1.0),2));
+        //float D=1/(pi*pow(roughness,4));
                                             
         float k=pow(roughness+1.0,2)/8.0;                                       
         float G1=nol/(nol*(1.0-k)+k);         
@@ -327,12 +329,11 @@ fragment_shader_source3 ="""
         vec3 vLight=normalize(lightPos - vVertexPos);
         vec3 vView=normalize(uCameraPos - vVertexPos);
         vec3 vHalf=normalize(vLight+vView); 
-        vec3 vReflect=reflect(vVertexPos-uCameraPos,vNormal);  
     
-        float hov = max(dot(vHalf,vView),0.0001);
-        float noh = max(dot(vNormal,vHalf),0.0001);
-        float nov = max(dot(vNormal,vView),0.0001);
-        float nol = max(dot(vNormal, vLight),0.0001);
+        float hov = max(dot(vHalf,vView),epsilon);
+        float noh =1;// max(dot(vNormal,vHalf),epsilon);
+        float nov = max(dot(vNormal,vView),epsilon);
+        float nol = max(dot(vNormal, vLight),epsilon);
                
         vec3 rd = lambertian(hov,noh,nov,nol);
 
@@ -352,13 +353,17 @@ fragment_shader_source3 ="""
             result += PBR(uLights[i].color,uLights[i].position);  
         result += basecolor*ra;
         
-        vec3 vReflect=reflect(vVertexPos-uCameraPos,vNormal);  
+        vec3 vReflect=normalize(reflect(vVertexPos-uCameraPos,vNormal));  
+        vec3 vView=normalize(uCameraPos - vVertexPos);
+        float nor = max(dot(vNormal, vReflect),epsilon);
+        float nov = max(dot(vNormal,vView),epsilon);
 
         vec3 temp2=vVertexPos+vReflect;
 
         result = PBR(texture(sSkyboxTexture,vReflect).xyz,temp2);
 
         gl_FragColor = vec4(result,1.0);
+        //gl_FragColor = vec4(vec3(nov,nov,nov),1.0);
     }
     """
 
