@@ -74,6 +74,173 @@ glEnable(GL_DEBUG_OUTPUT)
 
 skyboxvertices=[]
 
+
+
+
+class Scene:
+    def __init__(self):
+        self.objectlist=[]
+    
+    def Update(self):
+        for object in self.objectlist:
+            object.update()
+    
+    def AddGameObject(self,gameobject):
+        gameobject.scene=self
+        self.objectlist.append(gameobject)
+    
+    def GetGameObjectByComponent(self,name):
+        for gameobject in self.objectlist:
+            if gameobject.GetComponent(name):
+                return gameobject
+
+    def GetGameObjectsByComponent(self,name):
+        gameobjects=[]
+        for gameobject in self.objectlist:
+            if gameobject.GetComponent(name):
+                gameobjects.append(gameobject)
+
+class GameObject:
+    def __init__(self):
+        self.components=[]
+        self.AddComponent(Transform())
+        self.Transform=self.components[0]
+        self.scene=None
+    
+    def Update(self):
+        for component in self.components:
+            component.Update()
+    
+    def AddComponent(self, component):
+        component.gameobject=self
+        self.components.append(component)
+    
+    def GetComponent(self,name):
+        for component in self.components:
+            if type(component).__name__ == name:
+                return component
+        return False
+
+class Component:
+    def __init__(self):
+        self.gameobject=None
+    
+    def Update(self):
+        pass
+
+class Transform(Component):
+    def __init__(self):
+        self.__scale=[1,1,1]
+        self.__rotation=[0,0,0]
+        self.__translation=[0,0,0]
+    
+    def GetPos(self):
+        return self.__translation
+
+    def GetModelMatrix(self):
+        return np.array([
+            [       self.__scale[0],                     0,                     0,  0],
+            [                     0,       self.__scale[1],                     0,  0],
+            [                     0,                     0,       self.__scale[2],  0],
+            [ self.__translation[0], self.__translation[1], self.__translation[2],  1]
+        ])
+
+class Mesh(Component):
+    def __init__(self):
+        self.mesh=None
+    
+    def SetMesh(self,obj):
+        self.mesh=obj
+
+class MeshRenderer(Component):
+    def __init__(self):
+        self.mesh=None
+        self.camera=None
+        self.program=None
+        self.lights=[]
+    
+    def GetLights(self):
+        self.lights=self.gameobject.scene.GetGameObjectsByComponent("Light")
+        glUseProgram(self.program.program)
+        for i in range(len(self.lights)):
+            light=self.lights[i].GetComponent("Light")
+            glUniform3fv(self.program.lightslocation[i][0],1, self.lights[i].transform.GetPos())
+            glUniform3fv(self.program.lightslocation[i][1],1, light.color)
+
+    def GetMesh(self):
+        if temp:=self.gameobject.GetComponent("Mesh"):
+            self.mesh=temp
+
+    def GetCamera(self):
+        if temp:=self.gameobject.GetComponent("Camera"):
+            self.camera=temp
+
+        glUniform3fv(self.program.cameralocation, 1, self.camera)
+    
+    def SetProgram(self,program):
+        self.program=program
+
+    def Update(self):
+        glUseProgram(self.program.program)
+        glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 0, self.obj.vertices)
+        glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 0, self.obj.normals)
+        glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, 0, self.obj.texcoords)
+
+        view_matrix = self.camera.GetViewMatrix()
+        projection_matrix = self.camera.GetProjectionMatrix()
+        model_matrix = self.gameobject.transform.GetModelMatrix()
+        mv_matrix = np.dot(model_matrix, view_matrix)
+        
+        glUniformMatrix4fv(self.program.MVMatrixlocation, 1, GL_FALSE, mv_matrix)
+        glUniformMatrix4fv(self.program.PMatrixlocation, 1, GL_FALSE, projection_matrix)
+
+        for _material in self.metarialproperties.materiallist:
+            glUniform1f(_material.location,_material.value)
+
+        glUniform3fv(self.program.cameralocation, 1, self.camera.pos)
+
+        glDrawArrays(GL_TRIANGLES, 0, len(self.obj.vertices))
+
+class Light(Component):
+    def __init__(self):
+        self.type=None
+        self.color=(1,1,1)
+        self.intensity=1
+
+class Camera(Component):
+    def __init__(self):
+        self.type=None
+    
+    def GetViewMatrix(self):
+        return view(self.camerapos,self.rightvector,self.upvector,self.viewvector)
+
+    def GetProjectionMatrix(self):
+        if self.type==0:
+            return perspective(45, width/height, 0.1, 500)
+        elif self.type==1:
+            return perspective(45, width/height, 0.1, 500)
+    
+    def perspective(fovy, aspect, z_near, z_far):
+        f = 1 / math.tan(math.radians(fovy) / 2)
+        return np.array([
+            [f / aspect,  0,                                   0,  0],
+            [          0, f,                                   0,  0],
+            [          0, 0, (z_far + z_near) / (z_near - z_far), -1],
+            [          0, 0, (2*z_far*z_near) / (z_near - z_far),  0]
+        ])
+    
+    def orthogonal(aspect, z_near, z_far):
+        return np.array([
+            [1 / aspect,  0,                                   0,  0],
+            [          0, 1,                                   0,  0],
+            [          0, 0, (z_far + z_near) / (z_near - z_far), -1],
+            [          0, 0, (2*z_far*z_near) / (z_near - z_far),  0]
+        ])
+
+class Material(Component):
+    def __init__(self):
+        self.type=None
+
 class EditorMode:
     EditormodeIndex=0
     EditorModeList=[]
