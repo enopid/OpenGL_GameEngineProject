@@ -7,6 +7,7 @@ class OBJ:
         self._vertices = []
         self._normals = []
         self._texcoords = []
+        self.filename=filename
 
         self._vertex_triangles=[]
         self._texture_triangles=[]
@@ -65,3 +66,6 @@ class OBJ:
             for indices in self._texture_triangles
             for index in indices
         ])
+    
+    def __str__(self):
+        return self.filname.split("/")[-1].split(":")[0]

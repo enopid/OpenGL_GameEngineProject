@@ -78,9 +78,12 @@ fragment_shader_source1 ="""
             IOR = PBRValue[2];
         }
         else{
-            metalness = umetalness;
-            roughness = uroughness;
-            IOR = uIOR;
+            metalness = 0.5;
+            roughness = 0.2;
+            IOR = 2.0;
+            //metalness = umetalness;
+            //roughness = uroughness;
+            //IOR = uIOR;
         }    
     }
 
