@@ -5,12 +5,14 @@ from OpenGL.GL import *
 from OpenGL.GLU import *
 
 from vector import *
-from material import *
-from texture import *
 import shader
 from OBJhandler import *
 
 from PIL import Image
+
+import json
+
+from enum import Enum
 
 pygame.init()
 viewport = (800,600)
@@ -25,23 +27,6 @@ program1.InitCamera()
 program1.InitMaterial()
 program1.InitSkyBox()
 
-program2 = shader.Program(shader.initprogram2())
-program2.InitLight()
-program2.InitCamera()
-program2.InitMaterial()
-
-program3 = shader.Program(shader.initprogram1())
-program3.InitLight()
-program3.InitCamera()
-program3.InitMaterial()
-program3.InitTexture()
-
-program4 = shader.Program(shader.initprogram3())
-program4.InitLight()
-program4.InitCamera()
-program4.InitMaterial()
-program4.InitSkyBox()
-
 lightprogram = shader.Program(shader.initlightprogram())
 lightprogram.InitLight()
 lightprogram.InitCamera()
@@ -49,18 +34,6 @@ lightprogram.InitCamera()
 skyboxprogram = shader.Program(shader.initSkyboxprogram())
 skyboxprogram.InitSkyBox()
 skyboxprogram.InitCamera()
-
-PBRtexture = load_texture("./texture/image.png")
-texture = load_texture("./texture/lamp.png")
-skybox = load_skycube_texture("./skybox")
-
-glActiveTexture(GL_TEXTURE0)
-glBindTexture(GL_TEXTURE_2D, PBRtexture)
-
-glActiveTexture(GL_TEXTURE1)
-glBindTexture(GL_TEXTURE_2D, texture)
-
-glBindTexture(GL_TEXTURE_CUBE_MAP, skybox)
 
 object1 = OBJ("./model/testsphere2.obj", swapyz=False)
 object2 = OBJ("./model/testsphere1.obj", swapyz=False)
@@ -76,10 +49,25 @@ glEnable(GL_DEBUG_OUTPUT)
 skyboxvertices=[]
 
 class Scene:
-    def __init__(self):
+    def __init__(self, filepath=None):
         self.objectlist=[]
         self.keys=None
         self.curLog=None
+        if filepath!=None:
+            self.ReadScene(filepath)
+    
+    def ReadScene(self,filepath):
+        self.objectlist=[]
+        with open(filepath, 'r') as f:
+            jsonData=json.load(f)
+            for OBJname in jsonData:
+                gameobject=GameObject(OBJname)
+                for componentname in jsonData[OBJname]:
+                    data=jsonData[OBJname][componentname]
+                    temp=eval("{}(data)".format(componentname))
+                    gameobject.AddComponent(temp)
+                self.AddGameObject(gameobject)
+
     
     def Update(self):
         for object in self.objectlist:
@@ -128,6 +116,11 @@ class GameObject:
         self.scene=None
         self.name=name
     
+    def ChangeTransform(self,transform):
+        self.components[0]=transform
+        self.transform=self.components[0]
+
+    
     def Update(self):
         for component in self.components:
             component.Update()
@@ -138,7 +131,10 @@ class GameObject:
     
     def AddComponent(self, component):
         component.gameobject=self
-        self.components.append(component)
+        if type(component)==Transform and len(self.components):
+            self.ChangeTransform(component)
+        else:
+            self.components.append(component)
     
     def GetComponent(self,name):
         for component in self.components:
@@ -153,8 +149,13 @@ class GameObject:
         return temp
 
 class Component:
-    def __init__(self):
+    def __init__(self,data):
         self.gameobject=None
+        if data!=None:
+            self.ReadData(data)
+    
+    def ReadData(self,data):
+        pass
 
     def Init(self):
         pass
@@ -169,10 +170,16 @@ class Component:
         return [self.__class__.__name__]
 
 class Transform(Component):
-    def __init__(self):
+    def __init__(self,data=None):
         self.__scale=[1,1,1]
         self.__rotation=[0,0,0]
         self.__translation=[0,0,0]
+        super().__init__(data)
+            
+    def ReadData(self, data):
+        self.__scale=data["scale"]
+        self.__rotation=data["rotation"]
+        self.__translation=data["translation"]
     
     def GetPos(self):
         return self.__translation
@@ -236,8 +243,12 @@ class Transform(Component):
         return temp
 
 class Mesh(Component):
-    def __init__(self):
+    def __init__(self, data=None):
         self.mesh=None
+        super().__init__(data)
+            
+    def ReadData(self, data):
+        self.mesh=OBJ(data["path"], swapyz=False)
     
     def SetMesh(self,obj):
         self.mesh=obj
@@ -248,11 +259,16 @@ class Mesh(Component):
         return temp
 
 class MeshRenderer(Component):
-    def __init__(self):
+    def __init__(self,data=None):
         self.mesh=None
         self.camera=None
         self.program=None
         self.lights=[]
+        super().__init__(data)
+            
+    def ReadData(self, data):
+        eval("self.SetProgram({})".format(data["shader"]))
+        
 
     def Init(self):
         self.GetMesh()
@@ -277,7 +293,7 @@ class MeshRenderer(Component):
 
     def GetMeterial(self):
         if temp:=self.gameobject.scene.GetGameObjectByComponent("Material").GetComponent("Material"):
-            self.camera=temp
+            self.Material=temp
     
     def SetProgram(self,program):
         self.program=program
@@ -366,31 +382,41 @@ class Camera(Component):
         return temp
 
 class Material(Component):
-    materialproperties={
-        "albedo":["uUseAlbedotexture", 0, "sTexture", "uAlbedo"],
-        "metalness":["uUsePBRtexture", 1, "sPBRTexture", "umetalness"],
-        "roughness":["uUsePBRtexture", 2, "sPBRTexture", "uroughness"],
-        "normalmap":[],
+    materialTable={
+        "albedo": 0,
+        "metalness": 1,
+        "roughness": 2,
+        "ior": 3,
     }
+    ID=0
 
-    def __init__(self):
-        self.type=0
-        self.Albedo=None
-        self.Metalness=None
-        self.roughness=None
-        self.normalMap=None
+    class MaterialProperty:
+        def __init__(self, value=0):
+            self.useTexture=False
+            self.value=value
+            self.texturePath=None
+            self.textureID=Material.ID
+            Material.ID+=1
 
-        self.metalnesslocation = None
-        self.roughnesslocation = None
-        self.IORlocation = None
+    def __init__(self, data=None):
+        self.type="Opaque"
 
-        self.albedotexturelocation = None
-        self.PBRtexturelocation = None
-
-        self.uUsePBRtexture = None
-        self.uUseAlbedotexture = None
+        self.materialProperties=[]
+        for i in range(4):
+            self.materialProperties.append(Material.MaterialProperty())
 
         self.program = None
+        super().__init__(data)
+            
+    def ReadData(self, data):
+        self.SetProgram(program1)
+        self.type=data["type"]
+        for material in Material.materialTable:
+            if material in data:
+                if data[material]["usetexture"]:
+                    self.SetTexture(material, data[material]["texturepath"])
+                else:
+                    self.SetValue(material, data[material]["value"])
 
     def SetProgram(self,program):
         self.program=program
@@ -411,27 +437,31 @@ class Material(Component):
 
         return texture
     
-    def BindTexture(self, name,path):
-        texture = self.LoadTexture(path)
-        glActiveTexture(GL_TEXTURE0+Material.materialproperties[name][1])
-        glBindTexture(GL_TEXTURE_2D, texture)
+    def BindTexture(self, name, path):
+        material=self.materialProperties[Material.materialTable[name]]
+        glActiveTexture(GL_TEXTURE0+material.textureID)
+        self.LoadTexture(path)
+
+        material.useTexture=True
+        material.texturePath=path
     
     def SetTexture(self, name, path):
         glUseProgram(self.program.program)
         self.BindTexture(name, path)
-        buselocation=Material.materialproperties[name][0]
-        location=Material.materialproperties[name][2]
-        glUniform1i(glGetUniformLocation(self.program.program, buselocation), 1)
-        glUniform1i(glGetUniformLocation(self.program.program, location), Material.materialproperties[name][1])
+        material=self.materialProperties[Material.materialTable[name]]
+        glUniform1i(glGetUniformLocation(self.program.program, "uMaterials[{}].useTexture".format(Material.materialTable[name])), material.useTexture)
+        glUniform1i(glGetUniformLocation(self.program.program, "uMaterials[{}].texture".format(Material.materialTable[name])), material.textureID)
 
     def SetValue(self, name, value):
         glUseProgram(self.program.program)
-        buselocation=Material.materialproperties[name][0]
-        location=Material.materialproperties[name][3]
-        glUniform1i(glGetUniformLocation(self.program.program, buselocation), 0)
+        material=self.materialProperties[Material.materialTable[name]]
+        material.useTexture=False
+
+        glUniform1i(glGetUniformLocation(self.program.program, "uMaterials[{}].useTexture".format(Material.materialTable[name])), material.useTexture)
         if isinstance(value,float):
             value=[value,value,value]
-        glUniform3fv(glGetUniformLocation(self.program.program, location), 1, value)
+        material.value=value
+        glUniform3fv(glGetUniformLocation(self.program.program, "uMaterials[{}].value".format(Material.materialTable[name])), 1, material.value)
 
     def Log(self):
         temp=super().Log()
@@ -490,8 +520,9 @@ class CameraMove(Component):
     def Update(self):
         self.Move()
 
-Scene1=Scene()
+Scene1=Scene("./save/Scene1.json")
 
+"""
 box=GameObject("sphere")
 box.AddComponent(Mesh())
 box.GetComponent("Mesh").SetMesh(object1)
@@ -502,11 +533,17 @@ box.GetComponent("Material").SetProgram(program1)
 box.GetComponent("Material").SetValue("albedo", (0.5,0.6,0.7))
 box.GetComponent("Material").SetValue("metalness", 0.5)
 box.GetComponent("Material").SetValue("roughness", 0.5)
-
+"""
 
 light1=GameObject("light")
 light1.AddComponent(Light())
-light1.transform.SetPos([0,10,0])
+light1.transform.SetPos([10,3,0])
+light2=GameObject("light")
+light2.AddComponent(Light())
+light2.transform.SetPos([0,3,10])
+light3=GameObject("light")
+light3.AddComponent(Light())
+light3.transform.SetPos([10,3,10])
 
 camera=GameObject("camera")
 camera.AddComponent(Camera())
@@ -514,11 +551,12 @@ camera.AddComponent(CameraMove())
 camera.GetComponent("CameraMove").GetCamera()
 camera.transform.SetPos([0,0,10])
 
-Scene1.AddGameObject(box)
+#Scene1.AddGameObject(box)
 Scene1.AddGameObject(light1)
 Scene1.AddGameObject(camera)
 
-box.GetComponent("MeshRenderer").Init()
+for gameobject in Scene1.GetGameObjectsByComponent("MeshRenderer"):
+    gameobject.GetComponent("MeshRenderer").Init()
 
 clock = pygame.time.Clock()
 while 1:

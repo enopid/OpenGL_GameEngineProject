@@ -1,0 +1,36 @@
+{
+    "gameobject1" :{
+        "Transform" : {
+            "translation" : [0,0,0],
+            "scale" : [1,1,1],
+            "rotation" : [0,0,0]
+        },
+
+        "Mesh" : {
+            "path" : "./model/lamp.obj"
+        },
+
+        "MeshRenderer" : {
+            "shader" : "program1"
+        },
+
+        "Material" : {
+            "type" : "Opaque",
+            "albedo" : {
+                "usetexture" : true,
+                "value" : [1.0,0.0,0.0],
+                "texturepath" : "./texture/lamp.png"
+            },
+            "metalness" : {
+                "usetexture" : true,
+                "value" : 0.2,
+                "texturepath" : "./texture/image.png"
+            },
+            "roughness" : {
+                "usetexture" : true,
+                "value" : 1.0,
+                "texturepath" : "./texture/image.png"
+            }
+        }
+    }
+}

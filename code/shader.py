@@ -56,13 +56,13 @@ fragment_shader_source1 ="""
     float metalness;
     float roughness;                      
     float IOR;
+    vec3 basecolor = vec3(0.9529, 0.7882, 0.4078);     
 
     float test;
 
     float pi = 3.1415926535897932384626433832795;               
     float lightintensity = 10.0;   
-    vec4 skyboxcolor;
-    vec3 basecolor = vec3(0.9529, 0.7882, 0.4078);             
+    vec4 skyboxcolor;        
     float ra=0.1;  
     
     void init(){                        

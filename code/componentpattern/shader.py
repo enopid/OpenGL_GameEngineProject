@@ -25,76 +25,64 @@ vertex_shader_source = """
 fragment_shader_source1 ="""
     #version 330 core
     #define NUM_LIGHTS 4  
+    #define NUM_MATERIALS 4  
+    #define PI 3.14159265358979 
 
     struct Light {    
         vec3 position;
         vec3 color;
     };  
 
-    uniform Light uLights[NUM_LIGHTS];
-                                         
-    uniform vec3 umetalness;
-    uniform vec3 uroughness;                      
-    uniform vec3 uIOR;    
-    uniform vec3 uAlbedo;
+    struct Material {
+        bool useTexture;
+        vec3 value;
+        sampler2D texture;
+    };
 
-    uniform int uUsePBRtexture;                
-    uniform int uUseAlbedotexture;
-    uniform int uUseSkybox;
+    uniform Light uLights[NUM_LIGHTS];
+    uniform Material uMaterials[NUM_MATERIALS];
                                        
     uniform vec3 uLightPos;
     uniform vec3 uLightColor;
     uniform vec3 uCameraPos;
-                  
-    uniform sampler2D sTexture;
-    uniform sampler2D sPBRTexture;
-    uniform samplerCube sSkyboxTexture; 
 
     varying vec2 vTexCoord;             
     varying vec3 vNormal;    
     varying vec3 vVertexPos;
 
+    
+    vec3 materials[NUM_MATERIALS];
+
+    vec3 albedo;  
     float metalness;
     float roughness;                      
     float IOR;
-
-    float test;
-
-    float pi = 3.1415926535897932384626433832795;               
-    float lightintensity = 10.0;   
-    vec4 skyboxcolor;
-    vec3 basecolor = vec3(0.9529, 0.7882, 0.4078);             
+                    
     float ra=0.1;  
     
-    void init(){                        
-        if (uUseAlbedotexture==1){
-            vec4 color = texture2D(sTexture, vTexCoord);    
-            basecolor=vec3(color[0],color[1],color[2]); 
+    void init(){   
+        for(int i = 0; i < NUM_MATERIALS; i++){
+            if(uMaterials[i].useTexture){
+                vec4 temp = texture2D(uMaterials[i].texture, vTexCoord);    
+                materials[i]=temp.xyz; 
+            }
+            else{
+                materials[i]=uMaterials[i].value;
+            }
         }
-        else{  
-            basecolor=uAlbedo; 
-        }  
 
-
-        if (uUsePBRtexture==1){
-            vec4 PBRValue = texture2D(sPBRTexture, vTexCoord); 
-            roughness = PBRValue[0];           
-            metalness = PBRValue[1];
-            IOR = PBRValue[2];
-        }
-        else{
-            metalness = umetalness[0];
-            roughness = uroughness[0];
-            //IOR = uIOR[0];
-            IOR = 2.0;
-        }    
+        albedo=materials[0];            
+        metalness=materials[1].x;
+        roughness=materials[2].x;                      
+        //IOR=materials[3].x;
+        IOR=2.0;
     }
 
     float cooktorrance(float hov,float noh,float nov,float nol){     
         float F0=pow((1.0-IOR)/(1.0+IOR),2);        
         float F=F0+(1.0-F0)*pow((1-hov),5);
                                             
-        float D=pow(roughness,4)/(pi*pow((pow(noh,2)*(pow(roughness,4)-1.0)+1.0),2));
+        float D=pow(roughness,4)/(PI*pow((pow(noh,2)*(pow(roughness,4)-1.0)+1.0),2));
                                             
         float k=pow(roughness+1.0,2)/8.0;                                       
         float G1=nol/(nol*(1.0-k)+k);         
@@ -107,7 +95,7 @@ fragment_shader_source1 ="""
     vec3 lambertian(float hov,float noh,float nov,float nol){                 
         float dr = (1.0-metalness);
 
-        return dr*basecolor/pi;
+        return dr*albedo/PI;
     }
 
     vec3 PBR(vec3 lightColor, vec3 lightPos){
@@ -137,239 +125,9 @@ fragment_shader_source1 ="""
 
         for(int i = 0; i < NUM_LIGHTS; i++)
             result += PBR(uLights[i].color,uLights[i].position);  
-        result += basecolor*ra;
+        result += albedo*ra;
 
         gl_FragColor = vec4(result,1.0);
-    }
-    """
-        
-fragment_shader_source2 ="""
-    #version 330 core
-    #define NUM_LIGHTS 4  
-
-    struct Light {    
-        vec3 position;
-        vec3 color;
-    };  
-
-    uniform Light uLights[NUM_LIGHTS];
-                                         
-    uniform float umetalness;
-    uniform float uroughness;                      
-    uniform float uIOR;    
-
-    uniform int uUsePBRtexture;                
-    uniform int uUseAlbedotexture;
-                                                                     
-    uniform vec3 uLightPos;
-    uniform vec3 uLightColor;
-    uniform vec3 uCameraPos;
-                  
-    uniform sampler2D sTexture;
-    uniform sampler2D sPBRTexture;
-
-    varying vec2 vTexCoord;             
-    varying vec3 vNormal;    
-    varying vec3 vVertexPos;
-
-    float metalness;
-    float roughness;                      
-    float IOR;
-    float pi = 3.1415926535897932384626433832795;               
-    float lightintensity = 10.0;   
-    vec3 basecolor = vec3(0.9529, 0.7882, 0.4078);             
-    float ra=0.1;  
-    
-    void init(){                        
-        if (uUseAlbedotexture==1){
-            vec4 color = texture2D(sTexture, vTexCoord);    
-            basecolor=vec3(color[0],color[1],color[2]); 
-        }
-
-        if (uUsePBRtexture==1){
-            vec4 PBRValue = texture2D(sPBRTexture, vTexCoord); 
-            roughness = PBRValue[0];           
-            metalness = PBRValue[1];
-            IOR = PBRValue[2];
-        }
-        else{
-            metalness = umetalness;
-            roughness = uroughness;
-            IOR = uIOR;
-        }
-        metalness = min((ceil(vTexCoord[0]*10)*9/100+0.1),0.99);
-        roughness = min((ceil(vTexCoord[1]*10)*9/100+0.1),0.99);                   
-    }
-
-    float cooktorrance(float hov,float noh,float nov,float nol){     
-        float F0=pow((1.0-IOR)/(1.0+IOR),2);        
-        float F=F0+(1.0-F0)*pow((1-hov),5);
-                                            
-        float D=pow(roughness,4)/(pi*pow((pow(noh,2)*(pow(roughness,4)-1.0)+1.0),2));
-                                            
-        float k=pow(roughness+1.0,2)/8.0;                                       
-        float G1=nol/(nol*(1.0-k)+k);         
-        float G2=nov/(nov*(1.0-k)+k);
-        float G=G1*G2;
-                        
-        return F*D*G/(4.0*nol*nov); 
-    }
-
-    vec3 lambertian(float hov,float noh,float nov,float nol){                 
-        float dr = (1.0-metalness);
-
-        return dr*basecolor/pi;
-    }
-
-    vec3 PBR(vec3 lightColor, vec3 lightPos){
-        vec3 vLight=normalize(lightPos - vVertexPos);
-        vec3 vView=normalize(uCameraPos - vVertexPos);
-        vec3 vHalf=normalize(vLight+vView); 
-                           
-        float hov = max(dot(vHalf,vView),0.0001);
-        float noh = max(dot(vNormal,vHalf),0.0001);
-        float nov = max(dot(vNormal,vView),0.0001);
-        float nol = max(dot(vNormal, vLight),0.0001);
-                                     
-        vec3 rd = lambertian(hov,noh,nov,nol);
-
-        float rs = cooktorrance(hov,noh,nov,nol); 
-
-        float F0=pow((1.0-IOR)/(1.0+IOR),2);        
-        float kd=1-(F0+(1.0-F0)*pow((1-hov),5));
-
-        return (kd*rd*lightColor+rs*lightColor)*nol;
-    }          
-
-    void main(){    
-        init();      
-        vec3 result=vec3(0.0, 0.0, 0.0);
-
-        for(int i = 0; i < NUM_LIGHTS; i++)
-            result += PBR(uLights[i].color,uLights[i].position);  
-        result += basecolor*ra;
-
-       gl_FragColor = vec4(result,1.0);
-    }
-    """
-
-fragment_shader_source3 ="""
-    #version 330 core
-    #define NUM_LIGHTS 4  
-
-    struct Light {    
-        vec3 position;
-        vec3 color;
-    };  
-
-    uniform Light uLights[NUM_LIGHTS];
-                                         
-    uniform float umetalness;
-    uniform float uroughness;                      
-    uniform float uIOR;    
-
-    uniform int uUsePBRtexture;                
-    uniform int uUseAlbedotexture;
-    uniform int uUseSkybox;
-                                       
-    uniform vec3 uLightPos;
-    uniform vec3 uLightColor;
-    uniform vec3 uCameraPos;
-                  
-    uniform sampler2D sTexture;
-    uniform sampler2D sPBRTexture;
-    uniform samplerCube sSkyboxTexture; 
-
-    varying vec2 vTexCoord;             
-    varying vec3 vNormal;    
-    varying vec3 vVertexPos;
-
-    float metalness;
-    float roughness;                      
-    float IOR;
-
-    float test;
-
-    float pi = 3.1415926535897932384626433832795;               
-    float lightintensity = 10.0;   
-    vec4 skyboxcolor;
-    vec3 basecolor = vec3(0.9529, 0.7882, 0.4078);             
-    float ra=0.1;  
-    #define epsilon 0.000000000000000000001
-    
-    void init(){     
-        /*                   
-        if (uUseAlbedotexture==1){
-            vec4 color = texture2D(sTexture, vTexCoord);    
-            basecolor=vec3(color[0],color[1],color[2]); 
-        }
-        */
-
-        metalness = umetalness;
-        roughness = uroughness;
-        IOR = uIOR;
-    }
-
-    float cooktorrance(float hov,float noh,float nov,float nol){     
-        float F0=pow((1.0-IOR)/(1.0+IOR),2);        
-        float F=F0+(1.0-F0)*pow((1-hov),5);
-                                            
-        float D=pow(roughness,4)/(pi*pow((pow(noh,2)*(pow(roughness,4)-1.0)+1.0),2));
-        //float D=1/(pi*pow(roughness,4));
-                                            
-        float k=pow(roughness+1.0,2)/8.0;                                       
-        float G1=nol/(nol*(1.0-k)+k);         
-        float G2=nov/(nov*(1.0-k)+k);
-        float G=G1*G2;
-                        
-        return F*D*G/(4.0*nol*nov); 
-    }
-
-    vec3 lambertian(float hov,float noh,float nov,float nol){                 
-        float dr = (1.0-metalness);
-
-        return dr*basecolor/pi;
-    }
-
-    vec3 PBR(vec3 lightColor, vec3 lightPos){
-        vec3 vLight=normalize(lightPos - vVertexPos);
-        vec3 vView=normalize(uCameraPos - vVertexPos);
-        vec3 vHalf=normalize(vLight+vView); 
-    
-        float hov = max(dot(vHalf,vView),epsilon);
-        float noh =1;// max(dot(vNormal,vHalf),epsilon);
-        float nov = max(dot(vNormal,vView),epsilon);
-        float nol = max(dot(vNormal, vLight),epsilon);
-               
-        vec3 rd = lambertian(hov,noh,nov,nol);
-
-        float rs = cooktorrance(hov,noh,nov,nol); 
-
-        float F0=pow((1.0-IOR)/(1.0+IOR),2);        
-        float kd=1-(F0+(1.0-F0)*pow((1-hov),5));
-
-        return (kd*rd*lightColor+rs*lightColor)*nol;
-    }           
-
-    void main(){    
-        init();      
-        vec3 result=vec3(0.0, 0.0, 0.0);
-
-        for(int i = 0; i < NUM_LIGHTS; i++)
-            result += PBR(uLights[i].color,uLights[i].position);  
-        result += basecolor*ra;
-        
-        vec3 vReflect=normalize(reflect(vVertexPos-uCameraPos,vNormal));  
-        vec3 vView=normalize(uCameraPos - vVertexPos);
-        float nor = max(dot(vNormal, vReflect),epsilon);
-        float nov = max(dot(vNormal,vView),epsilon);
-
-        vec3 temp2=vVertexPos+vReflect;
-
-        result = PBR(texture(sSkyboxTexture,vReflect).xyz,temp2);
-
-        gl_FragColor = vec4(result,1.0);
-        //gl_FragColor = vec4(vec3(nov,nov,nov),1.0);
     }
     """
 
@@ -460,22 +218,6 @@ def load_shader(shader_type, source):
 
 def initprogram1():
     program = load_program(vertex_shader_source, fragment_shader_source1)
-    glUseProgram(program)
-    glEnableVertexAttribArray(0)
-    glEnableVertexAttribArray(1)
-    glEnableVertexAttribArray(2)
-    return program
-
-def initprogram2():
-    program = load_program(vertex_shader_source, fragment_shader_source2)
-    glUseProgram(program)
-    glEnableVertexAttribArray(0)
-    glEnableVertexAttribArray(1)
-    glEnableVertexAttribArray(2)
-    return program
-
-def initprogram3():
-    program = load_program(vertex_shader_source, fragment_shader_source3)
     glUseProgram(program)
     glEnableVertexAttribArray(0)
     glEnableVertexAttribArray(1)
