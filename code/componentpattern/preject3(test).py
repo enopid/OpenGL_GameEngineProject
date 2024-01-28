@@ -21,11 +21,15 @@ height = viewport[1]
 pygame.display.set_mode(viewport, OPENGL | DOUBLEBUF)
 
 #init shader
-program1 = shader.Program(shader.initprogram1())
-program1.InitLight()
-program1.InitCamera()
-program1.InitMaterial()
-program1.InitSkyBox()
+OpaqueShader = shader.Program(shader.initprogram1())
+OpaqueShader.InitLight()
+OpaqueShader.InitCamera()
+OpaqueShader.InitMaterial()
+OpaqueShader.InitSkyBox()
+
+testprogram = shader.Program(shader.initBillboardprogram())
+testprogram.InitCamera()
+testprogram.InitMaterial()
 
 lightprogram = shader.Program(shader.initlightprogram())
 lightprogram.InitLight()
@@ -45,6 +49,9 @@ glViewport(0, 0, width, height)
 
 glEnable(GL_DEPTH_TEST)
 glEnable(GL_DEBUG_OUTPUT)
+
+glEnable(GL_BLEND);  
+glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);  
 
 skyboxvertices=[]
 
@@ -131,6 +138,7 @@ class GameObject:
     
     def AddComponent(self, component):
         component.gameobject=self
+        component.init()
         if type(component)==Transform and len(self.components):
             self.ChangeTransform(component)
         else:
@@ -158,6 +166,9 @@ class Component:
         pass
 
     def Init(self):
+        pass
+
+    def init(self):
         pass
     
     def Update(self):
@@ -233,7 +244,7 @@ class Transform(Component):
         ])
 
     def GetModelMatrix(self):
-        return np.dot(self.GetTranslationMatrix(),np.dot(self.GetRotateMatrix(),self.GetScaleMatrix()))
+        return np.dot(np.dot(self.GetScaleMatrix(),self.GetRotateMatrix()),self.GetTranslationMatrix())
     
     def Log(self):
         temp=super().Log()
@@ -267,11 +278,12 @@ class MeshRenderer(Component):
         super().__init__(data)
             
     def ReadData(self, data):
-        eval("self.SetProgram({})".format(data["shader"]))
+        1
         
 
     def Init(self):
         self.GetMesh()
+        self.GetMaterial()
         self.GetLights()
         self.GetCamera()
     
@@ -291,15 +303,18 @@ class MeshRenderer(Component):
         if temp:=self.gameobject.scene.GetGameObjectByComponent("Camera").GetComponent("Camera"):
             self.camera=temp
 
-    def GetMeterial(self):
-        if temp:=self.gameobject.scene.GetGameObjectByComponent("Material").GetComponent("Material"):
+    def GetMaterial(self):
+        if temp:=self.gameobject.GetComponent("Material"):
             self.Material=temp
+        self.SetProgram(self.Material.program)
     
     def SetProgram(self,program):
         self.program=program
 
     def Update(self):
         glUseProgram(self.program.program)
+        self.Material.UpdateMaterial()
+
         glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 0, self.mesh.mesh.vertices)
         glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 0, self.mesh.mesh.normals)
         glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, 0, self.mesh.mesh.texcoords)
@@ -307,7 +322,6 @@ class MeshRenderer(Component):
         view_matrix = self.camera.GetViewMatrix()
         projection_matrix = self.camera.GetProjectionMatrix()
         model_matrix = self.gameobject.transform.GetModelMatrix()
-        mv_matrix = np.dot(model_matrix, view_matrix)
         
         self.lights=self.gameobject.scene.GetGameObjectsByComponent("Light")
         for i in range(len(self.lights)):
@@ -315,18 +329,103 @@ class MeshRenderer(Component):
             glUniform3fv(self.program.lightslocation[i][0],1, self.lights[i].transform.GetPos())
             glUniform3fv(self.program.lightslocation[i][1],1, light.color)
 
-        glUniformMatrix4fv(self.program.MVMatrixlocation, 1, GL_FALSE, mv_matrix)
-        glUniformMatrix4fv(self.program.PMatrixlocation, 1, GL_FALSE, projection_matrix)
+        glUniformMatrix4fv(glGetUniformLocation(self.program.program, "uVMatrix"), 1, GL_FALSE, view_matrix)
+        glUniformMatrix4fv(glGetUniformLocation(self.program.program, "uMMatrix"), 1, GL_FALSE, model_matrix)
+        glUniformMatrix4fv(glGetUniformLocation(self.program.program, "uPMatrix"), 1, GL_FALSE, projection_matrix)
 
         glUniform3fv(self.program.cameralocation, 1, self.camera.gameobject.transform.GetPos())
 
         glDrawArrays(GL_TRIANGLES, 0, len(self.mesh.mesh.vertices))
 
+class BillboardRenderer(Component):
+    def __init__(self,data=None):
+        self.camera=None
+        self.program=None
+        super().__init__(data)
+            
+    def ReadData(self, data):
+        1
+        
+
+    def Init(self):
+        self.GetCamera()
+        self.GetMaterial()
+
+    def GetCamera(self):
+        if temp:=self.gameobject.scene.GetGameObjectByComponent("Camera").GetComponent("Camera"):
+            self.camera=temp
+
+    def GetMaterial(self):
+        if temp:=self.gameobject.GetComponent("Material"):
+            self.Material=temp
+        self.SetProgram(self.Material.program)
+    
+    def SetProgram(self,program):
+        self.program=program
+
+    def Update(self):
+        glUseProgram(self.program.program)
+        self.Material.UpdateMaterial()
+
+        vertices=[
+            [1,1,0],
+            [1,-1,0],
+            [-1,1,0],
+
+            [-1,1,0],
+            [1,-1,0],
+            [-1,-1,0]
+        ]
+
+        texcoords=[
+            [1,0],
+            [1,1],
+            [0,0],
+                    
+            [0,0],
+            [1,1],
+            [0,1]
+        ]
+
+        glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 0, np.array(vertices))
+        glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 0,  np.array(texcoords))
+
+        view_matrix = self.camera.GetViewMatrix()
+        projection_matrix = self.camera.GetProjectionMatrix()
+        model_matrix = np.dot(
+            np.dot(self.gameobject.transform.GetScaleMatrix(),np.transpose(self.camera.gameobject.transform.GetRotateMatrix())),
+                   self.gameobject.transform.GetTranslationMatrix()
+            )
+
+        glUniformMatrix4fv(glGetUniformLocation(self.program.program, "uVMatrix"), 1, GL_FALSE, view_matrix)
+        glUniformMatrix4fv(glGetUniformLocation(self.program.program, "uMMatrix"), 1, GL_FALSE, model_matrix)
+        glUniformMatrix4fv(glGetUniformLocation(self.program.program, "uPMatrix"), 1, GL_FALSE, projection_matrix)
+
+        glDrawArrays(GL_TRIANGLES, 0, len(vertices))
+    
+
 class Light(Component):
-    def __init__(self):
+    def __init__(self, data=None):
         self.type=None
         self.color=(1,1,1)
         self.intensity=1
+        super().__init__(data)
+
+    def init(self):
+        self.gameobject.AddComponent(BillboardRenderer())
+        self.gameobject.GetComponent("BillboardRenderer").SetProgram(testprogram)
+
+        self.gameobject.AddComponent(Material())
+        self.gameobject.GetComponent("Material").SetProgram(testprogram)
+        self.gameobject.GetComponent("Material").SetTexture("albedo", "./icon/icon_light.png")
+            
+    def ReadData(self, data):
+        self.type=data["type"]
+        self.color=data["color"]
+        self.intensity=data["intensity"]
+            
+    def Update(self):
+        return super().Update()
 
     def Log(self):
         temp=super().Log()
@@ -409,20 +508,30 @@ class Material(Component):
         super().__init__(data)
             
     def ReadData(self, data):
-        self.SetProgram(program1)
         self.type=data["type"]
+        
+        if self.type=="Opaque":
+            self.SetProgram(OpaqueShader)
+
         for material in Material.materialTable:
             if material in data:
                 if data[material]["usetexture"]:
                     self.SetTexture(material, data[material]["texturepath"])
                 else:
                     self.SetValue(material, data[material]["value"])
+    
+    def UpdateMaterial(self):
+        for material in Material.materialTable:
+            if self.materialProperties[Material.materialTable[material]].useTexture:
+                self.UpdateTexture(material)
+            else:
+                self.UpdateValue(material)
 
     def SetProgram(self,program):
         self.program=program
     
     def LoadTexture(self,filename):
-        img = Image.open(filename, 'r').convert("RGB")
+        img = Image.open(filename, 'r').convert("RGBA")
         img_data = np.array(img, dtype=np.uint8)
         w, h = img.size
 
@@ -432,8 +541,8 @@ class Material(Component):
 
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST)
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST)
-
-        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, w, h, 0, GL_RGB, GL_UNSIGNED_BYTE, img_data)
+        
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, w, h, 0, GL_RGBA, GL_UNSIGNED_BYTE, img_data)
 
         return texture
     
@@ -449,6 +558,11 @@ class Material(Component):
         glUseProgram(self.program.program)
         self.BindTexture(name, path)
         material=self.materialProperties[Material.materialTable[name]]
+
+        self.UpdateTexture(name)
+    
+    def UpdateTexture(self,name):
+        material=self.materialProperties[Material.materialTable[name]]
         glUniform1i(glGetUniformLocation(self.program.program, "uMaterials[{}].useTexture".format(Material.materialTable[name])), material.useTexture)
         glUniform1i(glGetUniformLocation(self.program.program, "uMaterials[{}].texture".format(Material.materialTable[name])), material.textureID)
 
@@ -456,11 +570,16 @@ class Material(Component):
         glUseProgram(self.program.program)
         material=self.materialProperties[Material.materialTable[name]]
         material.useTexture=False
-
-        glUniform1i(glGetUniformLocation(self.program.program, "uMaterials[{}].useTexture".format(Material.materialTable[name])), material.useTexture)
         if isinstance(value,float):
             value=[value,value,value]
         material.value=value
+
+        self.UpdateValue(name)
+    
+    def UpdateValue(self,name):
+        material=self.materialProperties[Material.materialTable[name]]
+
+        glUniform1i(glGetUniformLocation(self.program.program, "uMaterials[{}].useTexture".format(Material.materialTable[name])), material.useTexture)
         glUniform3fv(glGetUniformLocation(self.program.program, "uMaterials[{}].value".format(Material.materialTable[name])), 1, material.value)
 
     def Log(self):
@@ -522,41 +641,30 @@ class CameraMove(Component):
 
 Scene1=Scene("./save/Scene1.json")
 
-"""
-box=GameObject("sphere")
-box.AddComponent(Mesh())
-box.GetComponent("Mesh").SetMesh(object1)
-box.AddComponent(MeshRenderer())
-box.GetComponent("MeshRenderer").SetProgram(program1)
-box.AddComponent(Material())
-box.GetComponent("Material").SetProgram(program1)
-box.GetComponent("Material").SetValue("albedo", (0.5,0.6,0.7))
-box.GetComponent("Material").SetValue("metalness", 0.5)
-box.GetComponent("Material").SetValue("roughness", 0.5)
-"""
-
 light1=GameObject("light")
+Scene1.AddGameObject(light1)
 light1.AddComponent(Light())
-light1.transform.SetPos([10,3,0])
+light1.transform.SetPos([5,3,-3])
+
 light2=GameObject("light")
+Scene1.AddGameObject(light2)
 light2.AddComponent(Light())
-light2.transform.SetPos([0,3,10])
-light3=GameObject("light")
-light3.AddComponent(Light())
-light3.transform.SetPos([10,3,10])
+light2.transform.SetPos([5,3,3])
 
 camera=GameObject("camera")
+Scene1.AddGameObject(camera)
 camera.AddComponent(Camera())
 camera.AddComponent(CameraMove())
 camera.GetComponent("CameraMove").GetCamera()
 camera.transform.SetPos([0,0,10])
 
-#Scene1.AddGameObject(box)
-Scene1.AddGameObject(light1)
-Scene1.AddGameObject(camera)
+
 
 for gameobject in Scene1.GetGameObjectsByComponent("MeshRenderer"):
     gameobject.GetComponent("MeshRenderer").Init()
+    
+for gameobject in Scene1.GetGameObjectsByComponent("BillboardRenderer"):
+    gameobject.GetComponent("BillboardRenderer").Init()
 
 clock = pygame.time.Clock()
 while 1:

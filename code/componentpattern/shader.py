@@ -2,7 +2,8 @@ from OpenGL.GL import *
 
 vertex_shader_source = """
     #version 330 core
-    uniform mat4 uMVMatrix;
+    uniform mat4 uMMatrix;
+    uniform mat4 uVMatrix;
     uniform mat4 uPMatrix;
                                        
     layout (location=0) in vec3 aVertex; 
@@ -15,14 +16,14 @@ vertex_shader_source = """
                                          
     void main(){
        vTexCoord = aTexCoord;
-       vVertexPos=aVertex;
+       vVertexPos = (uMMatrix * vec4(aVertex, 1.0)).xyz;
        vNormal=normalize(aNormal);                
                                        
-       gl_Position = (uPMatrix * uMVMatrix)  * vec4(aVertex, 1.0);
+       gl_Position = (uPMatrix * uVMatrix  * uMMatrix)  * vec4(aVertex, 1.0);
     }
     """
 
-fragment_shader_source1 ="""
+fragment_shader_source ="""
     #version 330 core
     #define NUM_LIGHTS 4  
     #define NUM_MATERIALS 4  
@@ -50,7 +51,6 @@ fragment_shader_source1 ="""
     varying vec3 vNormal;    
     varying vec3 vVertexPos;
 
-    
     vec3 materials[NUM_MATERIALS];
 
     vec3 albedo;  
@@ -128,6 +128,46 @@ fragment_shader_source1 ="""
         result += albedo*ra;
 
         gl_FragColor = vec4(result,1.0);
+    }
+    """
+
+
+Billboard_vertex_shader_source = """
+    #version 330 core
+    uniform mat4 uMMatrix;
+    uniform mat4 uVMatrix;
+    uniform mat4 uPMatrix;    
+       
+    layout (location=0) in vec3 aVertex; 
+    layout (location=1) in vec2 vTexcoord;
+
+    varying vec2 TexCoord;  
+                                         
+    void main(){    
+        gl_Position = (uPMatrix * uVMatrix * uMMatrix)  * vec4(aVertex, 1.0);   
+        TexCoord=vTexcoord;
+    }
+    """
+ 
+Billboard_fragment_shader_source ="""
+    #version 330 core
+    #define NUM_MATERIALS 4  
+
+    struct Material {
+        bool useTexture;
+        vec3 value;
+        sampler2D texture;
+    };
+
+    uniform Material uMaterials[NUM_MATERIALS];
+
+    varying vec2 TexCoord;  
+
+    void main(){      
+        vec4 texColor=texture(uMaterials[0].texture,TexCoord);
+        if (texColor.w < 0.1)
+            discard;
+       gl_FragColor = texture(uMaterials[0].texture,TexCoord);
     }
     """
 
@@ -217,7 +257,7 @@ def load_shader(shader_type, source):
     return shader
 
 def initprogram1():
-    program = load_program(vertex_shader_source, fragment_shader_source1)
+    program = load_program(vertex_shader_source, fragment_shader_source)
     glUseProgram(program)
     glEnableVertexAttribArray(0)
     glEnableVertexAttribArray(1)
@@ -226,6 +266,14 @@ def initprogram1():
 
 def initlightprogram():
     program = load_program(light_vertex_shader_source, light_fragment_shader_source)
+    glUseProgram(program)
+    glEnableVertexAttribArray(0)
+    glEnableVertexAttribArray(1)
+    glEnableVertexAttribArray(2)
+    return program
+
+def initBillboardprogram():
+    program = load_program(Billboard_vertex_shader_source, Billboard_fragment_shader_source)
     glUseProgram(program)
     glEnableVertexAttribArray(0)
     glEnableVertexAttribArray(1)
