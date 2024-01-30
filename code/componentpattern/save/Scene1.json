@@ -70,8 +70,36 @@
 
     "light1" :{
         "Transform" : {
-            "translation" : [-5,0,0],
-            "scale" : [1,1,1],
+            "translation" : [-5,2,0],
+            "scale" : [0.5,0.5,0.5],
+            "rotation" : [0,0,0]
+        },
+
+        "Light" : {
+            "type" : "point",
+            "color" : [1,1,1],
+            "intensity" : 1
+        }
+    },
+
+    "light2" :{
+        "Transform" : {
+            "translation" : [5,2,-3],
+            "scale" : [0.5,0.5,0.5],
+            "rotation" : [0,0,0]
+        },
+
+        "Light" : {
+            "type" : "point",
+            "color" : [1,1,1],
+            "intensity" : 1
+        }
+    },
+
+    "light3" :{
+        "Transform" : {
+            "translation" : [5,2,3],
+            "scale" : [0.5,0.5,0.5],
             "rotation" : [0,0,0]
         },
 

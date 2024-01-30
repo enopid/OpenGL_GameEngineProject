@@ -31,10 +31,6 @@ testprogram = shader.Program(shader.initBillboardprogram())
 testprogram.InitCamera()
 testprogram.InitMaterial()
 
-lightprogram = shader.Program(shader.initlightprogram())
-lightprogram.InitLight()
-lightprogram.InitCamera()
-
 skyboxprogram = shader.Program(shader.initSkyboxprogram())
 skyboxprogram.InitSkyBox()
 skyboxprogram.InitCamera()
@@ -74,7 +70,6 @@ class Scene:
                     temp=eval("{}(data)".format(componentname))
                     gameobject.AddComponent(temp)
                 self.AddGameObject(gameobject)
-
     
     def Update(self):
         for object in self.objectlist:
@@ -639,17 +634,32 @@ class CameraMove(Component):
     def Update(self):
         self.Move()
 
+def load_skycube_texture(filepath):
+    texture = glGenTextures(1)
+    glBindTexture(GL_TEXTURE_CUBE_MAP, texture)
+
+    img = Image.open(filepath, 'r').convert("RGB")
+    img_data = np.array(img, dtype=np.uint8)
+    w, h = img.size
+
+    glTexSubImage2D(GL_TEXTURE_CUBE_MAP_POSITIVE_X, 0, 2*w/4, 1*h/3, w/4, h/3, GL_RGB, GL_UNSIGNED_BYTE, img_data)
+    glTexSubImage2D(GL_TEXTURE_CUBE_MAP_NEGATIVE_X, 0, 0*w/4, 1*h/3, w/4, h/3, GL_RGB, GL_UNSIGNED_BYTE, img_data)
+    glTexSubImage2D(GL_TEXTURE_CUBE_MAP_POSITIVE_Y, 0, 1*w/4, 0*h/3, w/4, h/3, GL_RGB, GL_UNSIGNED_BYTE, img_data)
+    glTexSubImage2D(GL_TEXTURE_CUBE_MAP_NEGATIVE_Y, 0, 1*w/4, 2*h/3, w/4, h/3, GL_RGB, GL_UNSIGNED_BYTE, img_data)
+    glTexSubImage2D(GL_TEXTURE_CUBE_MAP_POSITIVE_Z, 0, 1*w/4, 1*h/3, w/4, h/3, GL_RGB, GL_UNSIGNED_BYTE, img_data)
+    glTexSubImage2D(GL_TEXTURE_CUBE_MAP_NEGATIVE_Z, 0, 3*w/4, 1*h/3, w/4, h/3, GL_RGB, GL_UNSIGNED_BYTE, img_data)
+        
+    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MAG_FILTER, GL_LINEAR)
+    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MIN_FILTER, GL_LINEAR)
+    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE)
+    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE)
+    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_R, GL_CLAMP_TO_EDGE)
+
+    return texture 
+
+load_skycube_texture("./skybox/dessert.jpg")
+
 Scene1=Scene("./save/Scene1.json")
-
-light1=GameObject("light")
-Scene1.AddGameObject(light1)
-light1.AddComponent(Light())
-light1.transform.SetPos([5,3,-3])
-
-light2=GameObject("light")
-Scene1.AddGameObject(light2)
-light2.AddComponent(Light())
-light2.transform.SetPos([5,3,3])
 
 camera=GameObject("camera")
 Scene1.AddGameObject(camera)

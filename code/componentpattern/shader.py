@@ -131,7 +131,6 @@ fragment_shader_source ="""
     }
     """
 
-
 Billboard_vertex_shader_source = """
     #version 330 core
     uniform mat4 uMMatrix;
@@ -168,35 +167,6 @@ Billboard_fragment_shader_source ="""
         if (texColor.w < 0.1)
             discard;
        gl_FragColor = texture(uMaterials[0].texture,TexCoord);
-    }
-    """
-
-light_vertex_shader_source = """
-    #version 330 core
-    uniform mat4 uMVMatrix;
-    uniform mat4 uPMatrix;     
-       
-    layout (location=0) in vec3 aVertex; 
-                                         
-    void main(){                       
-       gl_Position = (uPMatrix * uMVMatrix)  * vec4(aVertex, 1.0);
-    }
-    """
- 
-light_fragment_shader_source ="""
-    #version 330 core
-
-    #define NUM_LIGHTS 1
-
-    struct Light {    
-        vec3 position;
-        vec3 color;
-    };  
-
-    uniform Light uLights[NUM_LIGHTS]; 
-
-    void main(){         
-       gl_FragColor = vec4(uLights[0].color,1.0);
     }
     """
 
@@ -258,14 +228,6 @@ def load_shader(shader_type, source):
 
 def initprogram1():
     program = load_program(vertex_shader_source, fragment_shader_source)
-    glUseProgram(program)
-    glEnableVertexAttribArray(0)
-    glEnableVertexAttribArray(1)
-    glEnableVertexAttribArray(2)
-    return program
-
-def initlightprogram():
-    program = load_program(light_vertex_shader_source, light_fragment_shader_source)
     glUseProgram(program)
     glEnableVertexAttribArray(0)
     glEnableVertexAttribArray(1)
