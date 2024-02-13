@@ -68,4 +68,4 @@ class OBJ:
         ])
     
     def __str__(self):
-        return self.filname.split("/")[-1].split(":")[0]
+        return self.filename.split("/")[-1].split(".")[0]
