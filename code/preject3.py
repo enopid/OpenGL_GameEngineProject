@@ -13,8 +13,6 @@ from PIL import Image
 
 import json
 
-from enum import Enum
-
 pygame.init()
 viewport = (800,600)
 width = viewport[0]
@@ -27,6 +25,7 @@ testprogram = shader.initBillboardprogram()
 ppprogram = shader.inittestprogram()
 screenprogram = shader.initscreenprogram()
 skyboxprogram = shader.initSkyboxprogram()
+shadowprogram = shader.initshadowprogram()
 
 object1 = OBJ("./model/testsphere2.obj", swapyz=False)
 object2 = OBJ("./model/testsphere1.obj", swapyz=False)
@@ -68,7 +67,7 @@ class Scene:
         self.HandleInput()
         self.GetGameObjectByComponent("SkyBoxRender").GetComponent("SkyBoxRender").test()
         self.Update()
-        self.Log()
+        #self.Log()
         
         
     def ClearScene(self):
@@ -343,11 +342,18 @@ class MeshRenderer(Component):
         glUniformMatrix4fv(glGetUniformLocation(self.program, "uVMatrix"), 1, GL_FALSE, view_matrix)
         glUniformMatrix4fv(glGetUniformLocation(self.program, "uMMatrix"), 1, GL_FALSE, model_matrix)
         glUniformMatrix4fv(glGetUniformLocation(self.program, "uPMatrix"), 1, GL_FALSE, projection_matrix)
-
-        
         
         cameralocation = glGetUniformLocation(self.program, "uCameraPos")
         glUniform3fv(cameralocation, 1, self.camera.gameobject.transform.GetPos())
+
+        glDrawArrays(GL_TRIANGLES, 0, len(self.mesh.mesh.vertices))
+    
+    def testdraw(self):
+        glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 0, self.mesh.mesh.vertices)
+        
+        model_matrix = self.gameobject.transform.GetModelMatrix()
+        
+        glUniformMatrix4fv(glGetUniformLocation(shadowprogram, "uMMatrix"), 1, GL_FALSE, model_matrix)
 
         glDrawArrays(GL_TRIANGLES, 0, len(self.mesh.mesh.vertices))
 
@@ -417,10 +423,13 @@ class BillboardRenderer(Component):
         glDrawArrays(GL_TRIANGLES, 0, len(vertices))
     
 class Light(Component):
+    lights=[]
+    
     def __init__(self, data=None):
         self.type=None
         self.color=(1,1,1)
         self.intensity=1
+        self.lights=[]
         super().__init__(data)
 
     def Init(self):
@@ -445,6 +454,69 @@ class Light(Component):
         temp.append("---"+"color : {}".format(str(self.color)))
         temp.append("---"+"intensity : {}".format(str(self.intensity)))
         return temp
+    
+    def ShadowCasting():
+        glViewport(0, 0, shadowbuffer.SHADOW_WIDTH, shadowbuffer.SHADOW_HEIGHT)
+        shadowbuffer.active()
+        glClear(GL_DEPTH_BUFFER_BIT)
+        glUseProgram(shadowprogram)
+        
+        for gameobject in Light.lights:
+            light=gameobject.GetComponent("Light")
+            if light.type=="point":
+                light.Pointlightshadowcasting()
+            if light.type=="directional":
+                light.Directionallightshadowcasting()
+        
+        glViewport(0, 0, width, height)
+        
+    def Pointlightshadowcasting(self):
+        return
+        lightProjection = perspective(90.0, shadowbuffer.SHADOW_WIDTH/shadowbuffer.SHADOW_HEIGHT, 1.0, 25.0)
+        
+        viewMatrixlist=[]
+        viewMatrixlist.append(view(self.gameobject.transform.GetPos(),[],[0,-1,0],[1,0,0]))
+        viewMatrixlist.append(view(self.gameobject.transform.GetPos(),[],[0,-1,0],[-1,0,0]))
+        viewMatrixlist.append(view(self.gameobject.transform.GetPos(),[],[0,0,1],[0,1,0]))
+        viewMatrixlist.append(view(self.gameobject.transform.GetPos(),[],[0,0,-1],[0,-1,0]))
+        viewMatrixlist.append(view(self.gameobject.transform.GetPos(),[],[0,-1,0],[0,0,1]))
+        viewMatrixlist.append(view(self.gameobject.transform.GetPos(),[],[0,-1,0],[0,0,-1]))
+        
+        lightSpaceMatrix = lightProjection * viewMatrixlist[0]
+        glUniformMatrix4fv(glGetUniformLocation(shadowprogram, "lightSpaceMatrixLocation"), 1, GL_FALSE, lightSpaceMatrix)
+        
+        shadowbuffer.active()
+        glClear(GL_DEPTH_BUFFER_BIT)
+    
+    def Directionallightshadowcasting(self):
+        lightProjection = perspective(90.0, shadowbuffer.SHADOW_WIDTH/shadowbuffer.SHADOW_HEIGHT, 0.1, 500.0)
+        #lightProjection = perspective(45.0, width/height, 0.1, 10.0)
+        lightView=view([0,0,10],[1,0,0],[0,1,0],[0,0,1])
+        glUniformMatrix4fv(glGetUniformLocation(shadowprogram, "uPMatrix"), 1, GL_FALSE, lightProjection)
+        glUniformMatrix4fv(glGetUniformLocation(shadowprogram, "uVMatrix"), 1, GL_FALSE, lightView)
+        
+            
+        for gameobject in self.gameobject.scene.GetGameObjectsByComponent("MeshRenderer"):
+            gameobject.GetComponent("MeshRenderer").testdraw()
+            print("ok")
+        
+    def perspective(fovy, aspect, z_near, z_far):
+        f = 1 / math.tan(math.radians(fovy) / 2)
+        return np.array([
+            [f / aspect,  0,                                   0,  0],
+            [          0, f,                                   0,  0],
+            [          0, 0, (z_far + z_near) / (z_near - z_far), -1],
+            [          0, 0, (2*z_far*z_near) / (z_near - z_far),  0]
+        ])
+    
+    def orthogonal(aspect, z_near, z_far):
+        return np.array([
+            [1 / aspect,  0,                                   0,  0],
+            [          0, 1,                                   0,  0],
+            [          0, 0, (z_far + z_near) / (z_near - z_far), -1],
+            [          0, 0, (2*z_far*z_near) / (z_near - z_far),  0]
+        ])
+        
 
 class Camera(Component):
     def __init__(self,data=None):
@@ -664,6 +736,32 @@ class CameraMove(Component):
     def Update(self):
         self.Move()
 
+class ObjectMove(Component):
+    def __init__(self,data=None):
+        self.radius=0.0
+        self.speed=0.0
+        super().__init__(data)
+            
+    def ReadData(self, data):
+        self.radius=data["radius"]
+        self.speed=data["speed"]
+
+    def Init(self):
+        self.origin=self.gameobject.transform.GetPos()
+        self.degree=0.0
+
+    def Move(self):
+        temp=self.origin[:]
+        temp[0]+=self.radius*math.cos(self.degree)
+        temp[2]+=self.radius*math.sin(self.degree)
+        self.gameobject.transform.SetPos(temp)
+        self.degree+=self.speed
+        if self.degree >6.28:
+            self.degree-=6.28 
+
+    def Update(self):
+        self.Move()
+
 class SkyBoxRender(Component):
     defaultpath="./skybox/ice"
 
@@ -768,7 +866,7 @@ class SkyBoxRender(Component):
         return texture  
 
 class FrameBuffer():
-    offset=20
+    offset=22
     num=0
 
     def __init__(self):
@@ -784,6 +882,7 @@ class FrameBuffer():
         glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, width, height, 0, GL_RGB, GL_UNSIGNED_BYTE, [])
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST)
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST)
+        
         glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, texture, 0)
     
     def InitRenderBuffer(self):
@@ -805,29 +904,30 @@ class depthbuffer():
         self.buffer=glGenFramebuffers(1)
         self.active()
 
-        glActiveTexture(GL_TEXTURE0+FrameBuffer.offset+FrameBuffer.num)
-        self.ID=FrameBuffer.offset+FrameBuffer.num
-        FrameBuffer.num+=1
+        glActiveTexture(GL_TEXTURE0+depthbuffer.offset+depthbuffer.num)
+        self.ID=depthbuffer.offset+depthbuffer.num
+        depthbuffer.num+=1
+        self.SHADOW_WIDTH=1024
+        self.SHADOW_HEIGHT=1024
 
         texture=glGenTextures(1)
         glBindTexture(GL_TEXTURE_2D, texture)
-        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, width, height, 0, GL_RGB, GL_UNSIGNED_BYTE, [])
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT, self.SHADOW_WIDTH, self.SHADOW_HEIGHT, 0, GL_DEPTH_COMPONENT, GL_FLOAT, []);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST)
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST)
-        glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, texture, 0)
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT)
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT)
+        
+        glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, texture, 0)
+        glDrawBuffer(GL_NONE)
+        glReadBuffer(GL_NONE)
     
-    def InitRenderBuffer(self):
-        self.active()
-
-        rbo=glGenRenderbuffers(1)
-        glBindRenderbuffer(GL_RENDERBUFFER, rbo)
-        glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH24_STENCIL8, width, height)
-        glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_STENCIL_ATTACHMENT, GL_RENDERBUFFER, rbo)
+    def asd(self):
+        pass
 
     def active(self):
         glBindFramebuffer(GL_FRAMEBUFFER, self.buffer)
     
-
 def drawscreen(shader, textureslot):
     glUseProgram(shader)
     glDisable(GL_DEPTH_TEST)
@@ -864,21 +964,30 @@ def drawscreen(shader, textureslot):
     glEnable(GL_DEPTH_TEST)
 
 
+
+
 testbuffer=FrameBuffer()
 testbuffer.InitRenderBuffer()
 
 testbuffer2=FrameBuffer()
 testbuffer2.InitRenderBuffer()
 
+shadowbuffer=depthbuffer()
+
 glBindFramebuffer(GL_FRAMEBUFFER, 0)
 
 Scene1=Scene("./save/Scene1.json")
 
 Scene1.Init()
+Light.lights=Scene1.GetGameObjectsByComponent("Light")
 
 clock = pygame.time.Clock()
 while 1:
     clock.tick(30)
+    
+    glEnable(GL_DEPTH_TEST)
+    glDepthMask(GL_TRUE)
+    Light.ShadowCasting()
     
     testbuffer.active()
 
@@ -886,14 +995,16 @@ while 1:
     
     testbuffer2.active()
     
-    drawscreen(ppprogram,20)
+    drawscreen(ppprogram,22)
     
     glBindFramebuffer(GL_FRAMEBUFFER, 0)
 
     keys = pygame.key.get_pressed()
     if keys[K_TAB]:
-        drawscreen(screenprogram,21)
+        drawscreen(screenprogram,23)
+    elif keys[K_LSHIFT]:
+        drawscreen(screenprogram,25)
     else:
-        drawscreen(screenprogram,20)
+        drawscreen(screenprogram,22)
 
     pygame.display.flip()   

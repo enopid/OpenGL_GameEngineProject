@@ -1,4 +1,3 @@
-import pygame
 from pygame.locals import *
 from OpenGL.GL import *
 from OpenGL.GLU import *
@@ -55,6 +54,9 @@ def perspective(fovy, aspect, z_near, z_far):
     ])
 
 def view(pos, u, v, w):
+    if u==[]:
+        u=np.cross(v,w)
+    
     rotation=np.array([
         [   u[0], v[0],     w[0],  0],
         [   u[1], v[1],     w[1],  0],

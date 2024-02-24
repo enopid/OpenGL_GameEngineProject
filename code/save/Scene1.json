@@ -65,6 +65,45 @@
                 "value" : 0.2,
                 "texturepath" : "./texture/image.png"
             }
+        },
+
+        "ObjectMove" : {
+            "radius" : 4.0,
+            "speed" : 0.06
+        }
+    },
+
+    "plane" :{
+        "Transform" : {
+            "translation" : [0,-1,0],
+            "scale" : [1,1,1],
+            "rotation" : [0,0,0]
+        },
+
+        "Mesh" : {
+            "path" : "./model/plane.obj"
+        },
+
+        "MeshRenderer" : {
+        },
+
+        "Material" : {
+            "type" : "Opaque",
+            "albedo" : {
+                "usetexture" : false,
+                "value" : [0.9,0.9,0.9],
+                "texturepath" : "./texture/image.png"
+            },
+            "metalness" : {
+                "usetexture" : false,
+                "value" : 0.5,
+                "texturepath" : "./texture/image.png"
+            },
+            "roughness" : {
+                "usetexture" : false,
+                "value" : 0.7,
+                "texturepath" : "./texture/image.png"
+            }
         }
     },
 
@@ -76,7 +115,7 @@
         },
 
         "Light" : {
-            "type" : "point",
+            "type" : "directional",
             "color" : [1,1,1],
             "intensity" : 1
         }

@@ -300,6 +300,28 @@ skybox_fragment_shader_source ="""
     }
     """
 
+shadowmap_vertex_shader_source = """
+    #version 330 core
+    uniform mat4 uMMatrix;
+    uniform mat4 uVMatrix;
+    uniform mat4 uPMatrix;
+    uniform mat4 lightSpaceMatrix;
+                                       
+    layout (location=0) in vec3 aVertex;     
+                                         
+    void main(){          
+       gl_Position =  (uPMatrix * uVMatrix  * uMMatrix)  * vec4(aVertex, 1.0);
+    }
+    """
+
+shadowmap_fragment_shader_source = """
+    #version 330 core
+                             
+    void main(){          
+       //gl_FragDepth = gl_FragCoord.z;
+    }
+    """
+
 def load_program(vertex_source, fragment_source):
     vertex_shader = load_shader(GL_VERTEX_SHADER, vertex_source)
     fragment_shader = load_shader(GL_FRAGMENT_SHADER, fragment_source)
@@ -351,3 +373,6 @@ def inittestprogram():
 
 def initscreenprogram():
     return initprogram(screen_vertex_shader_source, screen_fragment_shader_source)
+
+def initshadowprogram():
+    return initprogram(shadowmap_vertex_shader_source, shadowmap_fragment_shader_source)
