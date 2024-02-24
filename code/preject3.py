@@ -1,4 +1,5 @@
 import sys, pygame, os
+
 from pygame.locals import *
 from pygame.constants import *
 from OpenGL.GL import *
@@ -24,6 +25,7 @@ pygame.display.set_mode(viewport, OPENGL | DOUBLEBUF)
 OpaqueShader = shader.initprogram1()
 testprogram = shader.initBillboardprogram()
 ppprogram = shader.inittestprogram()
+screenprogram = shader.initscreenprogram()
 skyboxprogram = shader.initSkyboxprogram()
 
 object1 = OBJ("./model/testsphere2.obj", swapyz=False)
@@ -59,6 +61,21 @@ class Scene:
                     temp=eval("{}(data)".format(componentname))
                     gameobject.AddComponent(temp)
                 self.AddGameObject(gameobject)
+    
+    def RenderScene(self):
+        self.ClearScene()
+    
+        self.HandleInput()
+        self.GetGameObjectByComponent("SkyBoxRender").GetComponent("SkyBoxRender").test()
+        self.Update()
+        self.Log()
+        
+        
+    def ClearScene(self):
+        glClearColor(1.0, 1.0, 1.0, 1.0)
+        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT)
+        glEnable(GL_DEPTH_TEST)
+        glDepthMask(GL_TRUE)
     
     def Init(self):
         for gameobject in self.objectlist:
@@ -666,7 +683,6 @@ class SkyBoxRender(Component):
         glActiveTexture(GL_TEXTURE0+20)
         self.load_skycube_texture(self.path)
 
-
     def GetCamera(self):
         if self.gameobject.scene and (temp:=self.gameobject.scene.GetGameObjectByComponent("Camera")):
             self.camera=temp.GetComponent("Camera")
@@ -675,7 +691,7 @@ class SkyBoxRender(Component):
         self.program=program
 
     def test(self):
-        glDepthMask(GL_FALSE);
+        glDepthMask(GL_FALSE)
         glUseProgram(self.program)
 
         vertices=[
@@ -781,9 +797,43 @@ class FrameBuffer():
     def active(self):
         glBindFramebuffer(GL_FRAMEBUFFER, self.buffer)
 
+class depthbuffer():
+    offset=25
+    num=0
+
+    def __init__(self):
+        self.buffer=glGenFramebuffers(1)
+        self.active()
+
+        glActiveTexture(GL_TEXTURE0+FrameBuffer.offset+FrameBuffer.num)
+        self.ID=FrameBuffer.offset+FrameBuffer.num
+        FrameBuffer.num+=1
+
+        texture=glGenTextures(1)
+        glBindTexture(GL_TEXTURE_2D, texture)
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, width, height, 0, GL_RGB, GL_UNSIGNED_BYTE, [])
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST)
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST)
+        glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, texture, 0)
+    
+    def InitRenderBuffer(self):
+        self.active()
+
+        rbo=glGenRenderbuffers(1)
+        glBindRenderbuffer(GL_RENDERBUFFER, rbo)
+        glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH24_STENCIL8, width, height)
+        glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_STENCIL_ATTACHMENT, GL_RENDERBUFFER, rbo)
+
+    def active(self):
+        glBindFramebuffer(GL_FRAMEBUFFER, self.buffer)
+    
+
 def drawscreen(shader, textureslot):
     glUseProgram(shader)
     glDisable(GL_DEPTH_TEST)
+    
+    glClearColor(1.0, 1.0, 1.0, 1.0)
+    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT)
 
     vertices=[
         [1,1,0],
@@ -808,15 +858,17 @@ def drawscreen(shader, textureslot):
     glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 0, np.array(vertices))
     glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 0,  np.array(texcoords))
 
-    glUniform1i(glGetUniformLocation(ppprogram,"screenTexture"),textureslot)
+    glUniform1i(glGetUniformLocation(shader,"screenTexture"),textureslot)
     glDrawArrays(GL_TRIANGLES, 0, 6)
+    
+    glEnable(GL_DEPTH_TEST)
 
 
 testbuffer=FrameBuffer()
 testbuffer.InitRenderBuffer()
 
-framebuffer=glGenFramebuffers(1)
-glBindFramebuffer(GL_FRAMEBUFFER, framebuffer)
+testbuffer2=FrameBuffer()
+testbuffer2.InitRenderBuffer()
 
 glBindFramebuffer(GL_FRAMEBUFFER, 0)
 
@@ -829,23 +881,19 @@ while 1:
     clock.tick(30)
     
     testbuffer.active()
-    glEnable(GL_DEPTH_TEST)
-    glDepthMask(GL_TRUE)
 
-    glClearColor(1.0, 1.0, 1.0, 1.0)
-    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT)
-    Scene1.HandleInput()
-    Scene1.GetGameObjectByComponent("SkyBoxRender").GetComponent("SkyBoxRender").test()
-    glEnable(GL_DEPTH_TEST)
-    Scene1.Update()
-    Scene1.Log()
-
-    glBindFramebuffer(GL_FRAMEBUFFER, 0)
-    glDepthMask(GL_FALSE)
-
-    glClearColor(1.0, 1.0, 1.0, 1.0)
-    glClear(GL_COLOR_BUFFER_BIT)
-
+    Scene1.RenderScene()
+    
+    testbuffer2.active()
+    
     drawscreen(ppprogram,20)
+    
+    glBindFramebuffer(GL_FRAMEBUFFER, 0)
+
+    keys = pygame.key.get_pressed()
+    if keys[K_TAB]:
+        drawscreen(screenprogram,21)
+    else:
+        drawscreen(screenprogram,20)
 
     pygame.display.flip()   
