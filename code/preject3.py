@@ -41,6 +41,50 @@ glEnable(GL_DEBUG_OUTPUT)
 glEnable(GL_BLEND)
 glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA)
 
+class GameObject:
+    def __init__(self,name):
+        self.components=[]
+        self.AddComponent(Transform())
+        self.transform=self.components[0]
+        self.scene=None
+        self.name=name
+    
+    def ChangeTransform(self,transform):
+        self.components[0]=transform
+        self.transform=self.components[0]
+
+    def Init(self):
+        for component in self.components:
+            component.Init()
+    
+    def Update(self):
+        for component in self.components:
+            component.Update()
+    
+    def HandleInput(self,event):
+        for component in self.components:
+            component.HandleInput(event)
+    
+    def AddComponent(self, component):
+        component.gameobject=self
+        component.Init()
+        if type(component)==Transform and len(self.components):
+            self.ChangeTransform(component)
+        else:
+            self.components.append(component)
+    
+    def GetComponent(self,name):
+        for component in self.components:
+            if type(component).__name__ == name:
+                return component
+        return False
+    
+    def Log(self):
+        temp=[]
+        for component in self.components:
+            temp.extend(component.Log())
+        return temp
+
 class Scene:
     def __init__(self, filepath=None):
         self.objectlist=[]
@@ -97,12 +141,12 @@ class Scene:
         gameobject.scene=self
         self.objectlist.append(gameobject)
     
-    def GetGameObjectByComponent(self,name):
+    def GetGameObjectByComponent(self,name:str) -> GameObject:
         for gameobject in self.objectlist:
             if gameobject.GetComponent(name):
                 return gameobject
 
-    def GetGameObjectsByComponent(self,name):
+    def GetGameObjectsByComponent(self,name:str) -> list:
         gameobjects=[]
         for gameobject in self.objectlist:
             if gameobject.GetComponent(name):
@@ -118,50 +162,6 @@ class Scene:
             os.system('cls')
             print(*temp,sep="\n")
             self.curLog=temp
-
-class GameObject:
-    def __init__(self,name):
-        self.components=[]
-        self.AddComponent(Transform())
-        self.transform=self.components[0]
-        self.scene=None
-        self.name=name
-    
-    def ChangeTransform(self,transform):
-        self.components[0]=transform
-        self.transform=self.components[0]
-
-    def Init(self):
-        for component in self.components:
-            component.Init()
-    
-    def Update(self):
-        for component in self.components:
-            component.Update()
-    
-    def HandleInput(self,event):
-        for component in self.components:
-            component.HandleInput(event)
-    
-    def AddComponent(self, component):
-        component.gameobject=self
-        component.Init()
-        if type(component)==Transform and len(self.components):
-            self.ChangeTransform(component)
-        else:
-            self.components.append(component)
-    
-    def GetComponent(self,name):
-        for component in self.components:
-            if type(component).__name__ == name:
-                return component
-        return False
-    
-    def Log(self):
-        temp=[]
-        for component in self.components:
-            temp.extend(component.Log())
-        return temp
 
 class Component:
     def __init__(self,data):
@@ -343,6 +343,12 @@ class MeshRenderer(Component):
         glUniformMatrix4fv(glGetUniformLocation(self.program, "uMMatrix"), 1, GL_FALSE, model_matrix)
         glUniformMatrix4fv(glGetUniformLocation(self.program, "uPMatrix"), 1, GL_FALSE, projection_matrix)
         
+        lightProjection = orthogonal(-10,10,-10, 10, 0.1, 40)
+        lightView=view([-7,7,0],[],[1/math.sqrt(2),1/math.sqrt(2),0],[-1/math.sqrt(2),1/math.sqrt(2),0])
+        lightSpaceMatrix=np.dot(lightView,lightProjection)
+        glUniformMatrix4fv(glGetUniformLocation(self.program, "uLightSpaceMatrix"), 1, GL_FALSE, lightSpaceMatrix)
+        glUniform1i(glGetUniformLocation(self.program, "shadowMap"), 25)
+        
         cameralocation = glGetUniformLocation(self.program, "uCameraPos")
         glUniform3fv(cameralocation, 1, self.camera.gameobject.transform.GetPos())
 
@@ -489,16 +495,13 @@ class Light(Component):
         glClear(GL_DEPTH_BUFFER_BIT)
     
     def Directionallightshadowcasting(self):
-        lightProjection = perspective(90.0, shadowbuffer.SHADOW_WIDTH/shadowbuffer.SHADOW_HEIGHT, 0.1, 500.0)
-        #lightProjection = perspective(45.0, width/height, 0.1, 10.0)
-        lightView=view([0,0,10],[1,0,0],[0,1,0],[0,0,1])
-        glUniformMatrix4fv(glGetUniformLocation(shadowprogram, "uPMatrix"), 1, GL_FALSE, lightProjection)
-        glUniformMatrix4fv(glGetUniformLocation(shadowprogram, "uVMatrix"), 1, GL_FALSE, lightView)
+        lightProjection = orthogonal(-10,10,-10,10, 0.1, 40)
+        lightView=view([-7,7,0],[],[1/math.sqrt(2),1/math.sqrt(2),0],[-1/math.sqrt(2),1/math.sqrt(2),0])
+        lightSpaceMatrix=np.dot(lightView,lightProjection)
+        glUniformMatrix4fv(glGetUniformLocation(shadowprogram, "uLightSpaceMatrix"), 1, GL_FALSE, lightSpaceMatrix)
         
-            
         for gameobject in self.gameobject.scene.GetGameObjectsByComponent("MeshRenderer"):
             gameobject.GetComponent("MeshRenderer").testdraw()
-            print("ok")
         
     def perspective(fovy, aspect, z_near, z_far):
         f = 1 / math.tan(math.radians(fovy) / 2)
@@ -509,12 +512,12 @@ class Light(Component):
             [          0, 0, (2*z_far*z_near) / (z_near - z_far),  0]
         ])
     
-    def orthogonal(aspect, z_near, z_far):
+    def orthogonal(left,right,bottom,top, z_near, z_far):
         return np.array([
-            [1 / aspect,  0,                                   0,  0],
-            [          0, 1,                                   0,  0],
-            [          0, 0, (z_far + z_near) / (z_near - z_far), -1],
-            [          0, 0, (2*z_far*z_near) / (z_near - z_far),  0]
+            [             2/(right-left),                          0,                                 0,  0],
+            [                          0,             2/(top-bottom),                                 0,  0],
+            [                          0,                          0,                 -2/(z_far-z_near),  0],
+            [ -(right+left)/(right-left), -(top+bottom)/(top-bottom), (z_far+z_near) / (z_near - z_far),  1]
         ])
         
 
@@ -544,7 +547,7 @@ class Camera(Component):
         if self.type==0:
             return perspective(45, width/height, 0.1, 500)
         elif self.type==1:
-            return perspective(45, width/height, 0.1, 500)
+            return orthogonal(-10, 10, -10, 10, 0.1, 40)
     
     def perspective(fovy, aspect, z_near, z_far):
         f = 1 / math.tan(math.radians(fovy) / 2)
@@ -555,12 +558,12 @@ class Camera(Component):
             [          0, 0, (2*z_far*z_near) / (z_near - z_far),  0]
         ])
     
-    def orthogonal(aspect, z_near, z_far):
+    def orthogonal(left,right,bottom,top, z_near, z_far):
         return np.array([
-            [1 / aspect,  0,                                   0,  0],
-            [          0, 1,                                   0,  0],
-            [          0, 0, (z_far + z_near) / (z_near - z_far), -1],
-            [          0, 0, (2*z_far*z_near) / (z_near - z_far),  0]
+            [             2/(right-left),                          0,                                 0,  0],
+            [                          0,             2/(top-bottom),                                 0,  0],
+            [                          0,                          0,                 -2/(z_far-z_near),  0],
+            [ -(right+left)/(right-left), -(top+bottom)/(top-bottom), (z_far+z_near) / (z_near - z_far),  1]
         ])
 
     def Log(self):
@@ -915,8 +918,10 @@ class depthbuffer():
         glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT, self.SHADOW_WIDTH, self.SHADOW_HEIGHT, 0, GL_DEPTH_COMPONENT, GL_FLOAT, []);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST)
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST)
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT)
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT)
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_BORDER)
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_BORDER)
+        borderColor = [1.0, 1.0, 1.0, 1.0]
+        glTexParameterfv(GL_TEXTURE_2D, GL_TEXTURE_BORDER_COLOR, borderColor)
         
         glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, texture, 0)
         glDrawBuffer(GL_NONE)
@@ -963,9 +968,6 @@ def drawscreen(shader, textureslot):
     
     glEnable(GL_DEPTH_TEST)
 
-
-
-
 testbuffer=FrameBuffer()
 testbuffer.InitRenderBuffer()
 
@@ -980,6 +982,8 @@ Scene1=Scene("./save/Scene1.json")
 
 Scene1.Init()
 Light.lights=Scene1.GetGameObjectsByComponent("Light")
+
+maincamera=Scene1.GetGameObjectByComponent("Camera").GetComponent("Camera")
 
 clock = pygame.time.Clock()
 while 1:
@@ -1006,5 +1010,11 @@ while 1:
         drawscreen(screenprogram,25)
     else:
         drawscreen(screenprogram,22)
+    
+    if keys[K_1]:
+        maincamera.type=1
+    else:
+        maincamera.type=0
+        
 
     pygame.display.flip()   

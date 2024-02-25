@@ -5,6 +5,7 @@ vertex_shader_source = """
     uniform mat4 uMMatrix;
     uniform mat4 uVMatrix;
     uniform mat4 uPMatrix;
+    uniform mat4 uLightSpaceMatrix;
                                        
     layout (location=0) in vec3 aVertex; 
     layout (location=1) in vec3 aNormal;
@@ -13,11 +14,13 @@ vertex_shader_source = """
     varying vec2 vTexCoord;                        
     varying vec3 vNormal;  
     varying vec3 vVertexPos; 
+    varying vec4 vFragPosLightSpace; 
                                          
     void main(){
        vTexCoord = aTexCoord;
        vVertexPos = (uMMatrix * vec4(aVertex, 1.0)).xyz;
-       vNormal=normalize(aNormal);                
+       vNormal=normalize(transpose(inverse(mat3(uMMatrix)))*aNormal);   
+       vFragPosLightSpace=uLightSpaceMatrix*vec4(vVertexPos,1.0); 
                                        
        gl_Position = (uPMatrix * uVMatrix  * uMMatrix)  * vec4(aVertex, 1.0);
     }
@@ -43,6 +46,7 @@ fragment_shader_source ="""
     uniform Light uLights[NUM_LIGHTS];
     uniform Material uMaterials[NUM_MATERIALS];
     uniform samplerCube uSkyboxTexture; 
+    uniform sampler2D shadowMap;
                                        
     uniform vec3 uLightPos;
     uniform vec3 uLightColor;
@@ -51,6 +55,7 @@ fragment_shader_source ="""
     varying vec2 vTexCoord;             
     varying vec3 vNormal;    
     varying vec3 vVertexPos;
+    varying vec4 vFragPosLightSpace; 
 
     vec3 materials[NUM_MATERIALS];
 
@@ -60,6 +65,31 @@ fragment_shader_source ="""
     float IOR;
                     
     float ra=0.1;  
+    
+    float ShadowCalculation(vec4 fragPosLightSpace){
+        vec3 projCoords = fragPosLightSpace.xyz / fragPosLightSpace.w;
+        projCoords = projCoords * 0.5 + 0.5;
+        float bias = 0.005;
+        float closestDepth = texture(shadowMap, projCoords.xy).r; 
+        float currentDepth = projCoords.z;
+        
+        float shadow = 0.0;
+        vec2 texelSize = 1.0 / textureSize(shadowMap, 0);
+        for(int x = -1; x <= 1; ++x)
+        {
+            for(int y = -1; y <= 1; ++y)
+            {
+                float pcfDepth = texture(shadowMap, projCoords.xy + vec2(x, y) * texelSize).r; 
+                shadow += currentDepth - bias > pcfDepth ? 1.0 : 0.0;        
+            }    
+        }
+        shadow /= 9.0;
+        
+        if (currentDepth>1.0)
+            shadow=0.0;
+
+        return shadow;
+    }
     
     void init(){   
         for(int i = 0; i < NUM_MATERIALS; i++){
@@ -140,9 +170,12 @@ fragment_shader_source ="""
     void main(){    
         init();      
         vec3 result=vec3(0.0, 0.0, 0.0);
+        
+        float shadow=ShadowCalculation(vFragPosLightSpace);
 
         for(int i = 0; i < NUM_LIGHTS; i++)
             result += PBR(uLights[i].color,uLights[i].position);  
+        result*=(1.0-shadow);
         result += albedo*ra;
 
         gl_FragColor = vec4(result,1.0);
@@ -303,14 +336,12 @@ skybox_fragment_shader_source ="""
 shadowmap_vertex_shader_source = """
     #version 330 core
     uniform mat4 uMMatrix;
-    uniform mat4 uVMatrix;
-    uniform mat4 uPMatrix;
-    uniform mat4 lightSpaceMatrix;
+    uniform mat4 uLightSpaceMatrix;
                                        
     layout (location=0) in vec3 aVertex;     
                                          
     void main(){          
-       gl_Position =  (uPMatrix * uVMatrix  * uMMatrix)  * vec4(aVertex, 1.0);
+       gl_Position =  (uLightSpaceMatrix  * uMMatrix)  * vec4(aVertex, 1.0);
     }
     """
 

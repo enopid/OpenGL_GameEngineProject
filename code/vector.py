@@ -95,3 +95,11 @@ def translate(pos):
         [      0,      0,      1,  0],
         [ pos[0], pos[1], pos[2],  1]
     ])
+    
+def orthogonal(left,right,bottom,top, z_near, z_far):
+    return np.array([
+        [             2/(right-left),                          0,                                 0,  0],
+        [                          0,             2/(top-bottom),                                 0,  0],
+        [                          0,                          0,                 -2/(z_far-z_near),  0],
+        [ -(right+left)/(right-left), -(top+bottom)/(top-bottom), (z_far+z_near) / (z_near - z_far),  1]
+    ])

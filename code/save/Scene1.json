@@ -76,7 +76,7 @@
     "plane" :{
         "Transform" : {
             "translation" : [0,-1,0],
-            "scale" : [1,1,1],
+            "scale" : [10,1,10],
             "rotation" : [0,0,0]
         },
 
@@ -157,7 +157,7 @@
 
     "camera" : {
         "Transform" : {
-            "translation" : [0,0,10],
+            "translation" : [1,1,0],
             "scale" : [1,1,1],
             "rotation" : [0,0,0]
         },
@@ -167,7 +167,7 @@
         },
 
         "Camera" : {
-            "type" : 0
+            "type" : 1
         }
     }
 }
