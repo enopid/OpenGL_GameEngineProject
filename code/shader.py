@@ -5,7 +5,6 @@ vertex_shader_source = """
     uniform mat4 uMMatrix;
     uniform mat4 uVMatrix;
     uniform mat4 uPMatrix;
-    uniform mat4 uLightSpaceMatrix;
                                        
     layout (location=0) in vec3 aVertex; 
     layout (location=1) in vec3 aNormal;
@@ -14,13 +13,11 @@ vertex_shader_source = """
     varying vec2 vTexCoord;                        
     varying vec3 vNormal;  
     varying vec3 vVertexPos; 
-    varying vec4 vFragPosLightSpace; 
                                          
     void main(){
        vTexCoord = aTexCoord;
        vVertexPos = (uMMatrix * vec4(aVertex, 1.0)).xyz;
        vNormal=normalize(transpose(inverse(mat3(uMMatrix)))*aNormal);   
-       vFragPosLightSpace=uLightSpaceMatrix*vec4(vVertexPos,1.0); 
                                        
        gl_Position = (uPMatrix * uVMatrix  * uMMatrix)  * vec4(aVertex, 1.0);
     }
@@ -28,13 +25,16 @@ vertex_shader_source = """
 
 fragment_shader_source ="""
     #version 330 core
-    #define NUM_LIGHTS 4  
+    #define NUM_LIGHTS 4
     #define NUM_MATERIALS 4  
     #define PI 3.14159265358979 
 
-    struct Light {    
+    struct Light { 
+        int type;   
         vec3 position;
         vec3 color;
+        mat4 uLightSpaceMatrix;
+        sampler2D shadowMap;
     };  
 
     struct Material {
@@ -46,7 +46,6 @@ fragment_shader_source ="""
     uniform Light uLights[NUM_LIGHTS];
     uniform Material uMaterials[NUM_MATERIALS];
     uniform samplerCube uSkyboxTexture; 
-    uniform sampler2D shadowMap;
                                        
     uniform vec3 uLightPos;
     uniform vec3 uLightColor;
@@ -55,7 +54,6 @@ fragment_shader_source ="""
     varying vec2 vTexCoord;             
     varying vec3 vNormal;    
     varying vec3 vVertexPos;
-    varying vec4 vFragPosLightSpace; 
 
     vec3 materials[NUM_MATERIALS];
 
@@ -63,10 +61,11 @@ fragment_shader_source ="""
     float metalness;
     float roughness;                      
     float IOR;
+    vec4 vFragPosLightSpace; 
                     
     float ra=0.1;  
     
-    float ShadowCalculation(vec4 fragPosLightSpace){
+    float ShadowCalculation(vec4 fragPosLightSpace, sampler2D shadowMap){
         vec3 projCoords = fragPosLightSpace.xyz / fragPosLightSpace.w;
         projCoords = projCoords * 0.5 + 0.5;
         float bias = 0.005;
@@ -170,12 +169,17 @@ fragment_shader_source ="""
     void main(){    
         init();      
         vec3 result=vec3(0.0, 0.0, 0.0);
+        float shadow;
         
-        float shadow=ShadowCalculation(vFragPosLightSpace);
 
-        for(int i = 0; i < NUM_LIGHTS; i++)
-            result += PBR(uLights[i].color,uLights[i].position);  
-        result*=(1.0-shadow);
+        for(int i = 0; i < NUM_LIGHTS; i++){
+            vFragPosLightSpace=uLights[i].uLightSpaceMatrix*vec4(vVertexPos,1.0); 
+            if (i==0)
+                shadow=ShadowCalculation(vFragPosLightSpace,uLights[i].shadowMap);
+            else
+                shadow-0.0;
+            result += PBR(uLights[i].color,uLights[i].position)*(1.0-shadow); 
+        } 
         result += albedo*ra;
 
         gl_FragColor = vec4(result,1.0);

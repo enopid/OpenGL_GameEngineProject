@@ -45,7 +45,7 @@ class GameObject:
     def __init__(self,name):
         self.components=[]
         self.AddComponent(Transform())
-        self.transform=self.components[0]
+        self.transform:Transform=self.components[0]
         self.scene=None
         self.name=name
     
@@ -67,7 +67,6 @@ class GameObject:
     
     def AddComponent(self, component):
         component.gameobject=self
-        component.Init()
         if type(component)==Transform and len(self.components):
             self.ChangeTransform(component)
         else:
@@ -165,7 +164,7 @@ class Scene:
 
 class Component:
     def __init__(self,data):
-        self.gameobject=None
+        self.gameobject:GameObject=None
         if data!=None:
             self.ReadData(data)
     
@@ -235,9 +234,18 @@ class Transform(Component):
 
     def GetRotateMatrix(self):
         t1=self.rotate(self.__rotation[0], 1, 0, 0)
-        t2=self.rotate(self.__rotation[2],0,0,1)
+        t2=self.rotate(self.__rotation[1],0,1,0)
         temp=np.dot(t1, t2)
-        return np.dot(self.rotate(self.__rotation[1],0,1,0), temp)
+        return np.dot(self.rotate(self.__rotation[2],0,0,1), temp)
+    
+    def GetUVWVector(self):
+        rotationmatrix = self.GetRotateMatrix()
+        temp=np.transpose(rotationmatrix)
+        u=np.dot(temp,np.array([1,0,0,0]))
+        v=np.dot(temp,np.array([0,1,0,0]))
+        w=np.dot(temp,np.array([0,0,1,0]))
+        
+        return [u,v,w]
     
     def GetTranslationMatrix(self):
         return np.array([
@@ -336,18 +344,21 @@ class MeshRenderer(Component):
             light=self.lights[i].GetComponent("Light")
             pos=glGetUniformLocation(self.program, "uLights[{}].position".format(i))
             color=glGetUniformLocation(self.program, "uLights[{}].color".format(i))
+            lightSpaceMatrix=glGetUniformLocation(self.program, "uLights[{}].uLightSpaceMatrix".format(i))
+            shadowmap=glGetUniformLocation(self.program, "uLights[{}].shadowMap".format(i))
+            
+            
             glUniform3fv(pos,1, light.gameobject.transform.GetPos())
             glUniform3fv(color,1, light.color)
+            glUniformMatrix4fv(lightSpaceMatrix, 1, GL_FALSE, light.GetLightSpaceMatrix())
+            if i==0:
+                glUniform1i(shadowmap, 25)
+            else:
+                glUniform1i(shadowmap, 26)
 
         glUniformMatrix4fv(glGetUniformLocation(self.program, "uVMatrix"), 1, GL_FALSE, view_matrix)
         glUniformMatrix4fv(glGetUniformLocation(self.program, "uMMatrix"), 1, GL_FALSE, model_matrix)
         glUniformMatrix4fv(glGetUniformLocation(self.program, "uPMatrix"), 1, GL_FALSE, projection_matrix)
-        
-        lightProjection = orthogonal(-10,10,-10, 10, 0.1, 40)
-        lightView=view([-7,7,0],[],[1/math.sqrt(2),1/math.sqrt(2),0],[-1/math.sqrt(2),1/math.sqrt(2),0])
-        lightSpaceMatrix=np.dot(lightView,lightProjection)
-        glUniformMatrix4fv(glGetUniformLocation(self.program, "uLightSpaceMatrix"), 1, GL_FALSE, lightSpaceMatrix)
-        glUniform1i(glGetUniformLocation(self.program, "shadowMap"), 25)
         
         cameralocation = glGetUniformLocation(self.program, "uCameraPos")
         glUniform3fv(cameralocation, 1, self.camera.gameobject.transform.GetPos())
@@ -418,7 +429,7 @@ class BillboardRenderer(Component):
         view_matrix = self.camera.GetViewMatrix()
         projection_matrix = self.camera.GetProjectionMatrix()
         model_matrix = np.dot(
-            np.dot(self.gameobject.transform.GetScaleMatrix(),np.transpose(self.camera.gameobject.transform.GetRotateMatrix())),
+            np.dot(self.gameobject.transform.GetScaleMatrix(),self.camera.gameobject.transform.GetRotateMatrix()),
                    self.gameobject.transform.GetTranslationMatrix()
             )
 
@@ -445,6 +456,12 @@ class Light(Component):
         self.gameobject.AddComponent(Material())
         self.gameobject.GetComponent("Material").SetProgram(testprogram)
         self.gameobject.GetComponent("Material").SetTexture("albedo", "./icon/icon_light.png")
+        
+        if self.type=="directional":
+            self.gameobject.AddComponent(Mesh())
+            self.gameobject.GetComponent("Mesh").SetMesh(OBJ("./model/arrow.obj", swapyz=False))
+            self.gameobject.AddComponent(MeshRenderer())
+            self.gameobject.GetComponent("MeshRenderer").SetProgram(OpaqueShader)
             
     def ReadData(self, data):
         self.type=data["type"]
@@ -478,47 +495,23 @@ class Light(Component):
         
     def Pointlightshadowcasting(self):
         return
-        lightProjection = perspective(90.0, shadowbuffer.SHADOW_WIDTH/shadowbuffer.SHADOW_HEIGHT, 1.0, 25.0)
-        
-        viewMatrixlist=[]
-        viewMatrixlist.append(view(self.gameobject.transform.GetPos(),[],[0,-1,0],[1,0,0]))
-        viewMatrixlist.append(view(self.gameobject.transform.GetPos(),[],[0,-1,0],[-1,0,0]))
-        viewMatrixlist.append(view(self.gameobject.transform.GetPos(),[],[0,0,1],[0,1,0]))
-        viewMatrixlist.append(view(self.gameobject.transform.GetPos(),[],[0,0,-1],[0,-1,0]))
-        viewMatrixlist.append(view(self.gameobject.transform.GetPos(),[],[0,-1,0],[0,0,1]))
-        viewMatrixlist.append(view(self.gameobject.transform.GetPos(),[],[0,-1,0],[0,0,-1]))
-        
-        lightSpaceMatrix = lightProjection * viewMatrixlist[0]
-        glUniformMatrix4fv(glGetUniformLocation(shadowprogram, "lightSpaceMatrixLocation"), 1, GL_FALSE, lightSpaceMatrix)
-        
-        shadowbuffer.active()
-        glClear(GL_DEPTH_BUFFER_BIT)
     
     def Directionallightshadowcasting(self):
-        lightProjection = orthogonal(-10,10,-10,10, 0.1, 40)
-        lightView=view([-7,7,0],[],[1/math.sqrt(2),1/math.sqrt(2),0],[-1/math.sqrt(2),1/math.sqrt(2),0])
-        lightSpaceMatrix=np.dot(lightView,lightProjection)
-        glUniformMatrix4fv(glGetUniformLocation(shadowprogram, "uLightSpaceMatrix"), 1, GL_FALSE, lightSpaceMatrix)
+        glUniformMatrix4fv(glGetUniformLocation(shadowprogram, "uLightSpaceMatrix"), 1, GL_FALSE, self.GetLightSpaceMatrix())
         
         for gameobject in self.gameobject.scene.GetGameObjectsByComponent("MeshRenderer"):
             gameobject.GetComponent("MeshRenderer").testdraw()
-        
-    def perspective(fovy, aspect, z_near, z_far):
-        f = 1 / math.tan(math.radians(fovy) / 2)
-        return np.array([
-            [f / aspect,  0,                                   0,  0],
-            [          0, f,                                   0,  0],
-            [          0, 0, (z_far + z_near) / (z_near - z_far), -1],
-            [          0, 0, (2*z_far*z_near) / (z_near - z_far),  0]
-        ])
     
-    def orthogonal(left,right,bottom,top, z_near, z_far):
-        return np.array([
-            [             2/(right-left),                          0,                                 0,  0],
-            [                          0,             2/(top-bottom),                                 0,  0],
-            [                          0,                          0,                 -2/(z_far-z_near),  0],
-            [ -(right+left)/(right-left), -(top+bottom)/(top-bottom), (z_far+z_near) / (z_near - z_far),  1]
-        ])
+    def GetLightSpaceMatrix(self):
+        lightSpaceMatrix=np.identity(4)
+        if self.type=="directional":
+            lightProjection = orthogonal(-10,10,-10,10, 0.1, 40)
+            u,v,w=self.gameobject.transform.GetUVWVector()
+            lightView=view(self.gameobject.transform.GetPos(),u,v,w)
+            lightSpaceMatrix=np.dot(lightView,lightProjection)
+        elif self.type=="point":
+            pass
+        return lightSpaceMatrix
         
 
 class Camera(Component):
@@ -531,15 +524,9 @@ class Camera(Component):
             
     def ReadData(self, data):
         self.type=data["type"]
-    
-    def GetUVWVector(self):
-        rotationmatrix = self.gameobject.transform.GetRotateMatrix()
-        self.rightvector=np.dot(rotationmatrix,np.array([1,0,0,0]))
-        self.upvector=np.dot(rotationmatrix,np.array([0,1,0,0]))
-        self.viewvector=np.dot(rotationmatrix,np.array([0,0,1,0]))
 
     def GetViewMatrix(self):
-        self.GetUVWVector()
+        self.rightvector,self.upvector,self.viewvector=self.gameobject.transform.GetUVWVector()
         
         return view(self.gameobject.transform.GetPos(),self.rightvector,self.upvector,self.viewvector)
 
@@ -548,23 +535,6 @@ class Camera(Component):
             return perspective(45, width/height, 0.1, 500)
         elif self.type==1:
             return orthogonal(-10, 10, -10, 10, 0.1, 40)
-    
-    def perspective(fovy, aspect, z_near, z_far):
-        f = 1 / math.tan(math.radians(fovy) / 2)
-        return np.array([
-            [f / aspect,  0,                                   0,  0],
-            [          0, f,                                   0,  0],
-            [          0, 0, (z_far + z_near) / (z_near - z_far), -1],
-            [          0, 0, (2*z_far*z_near) / (z_near - z_far),  0]
-        ])
-    
-    def orthogonal(left,right,bottom,top, z_near, z_far):
-        return np.array([
-            [             2/(right-left),                          0,                                 0,  0],
-            [                          0,             2/(top-bottom),                                 0,  0],
-            [                          0,                          0,                 -2/(z_far-z_near),  0],
-            [ -(right+left)/(right-left), -(top+bottom)/(top-bottom), (z_far+z_near) / (z_near - z_far),  1]
-        ])
 
     def Log(self):
         temp=super().Log()
@@ -732,8 +702,8 @@ class CameraMove(Component):
             i, j = event.rel
             if self.rotate:
                 temp=self.gameobject.transform.GetRotation()
-                temp[0]-=j
-                temp[1]-=i
+                temp[0]+=j
+                temp[1]+=i
                 self.gameobject.transform.SetRotation(temp)
 
     def Update(self):
@@ -833,9 +803,9 @@ class SkyBoxRender(Component):
 
         projection_matrix = self.camera.GetProjectionMatrix()
         model_matrix = np.identity(4, dtype=np.float32)
-        self.camera.GetUVWVector()
+        rightvector,upvector,viewvector=self.camera.gameobject.transform.GetUVWVector()
         
-        view_matrix=view([0,0,0],self.camera.rightvector,self.camera.upvector,self.camera.viewvector)
+        view_matrix=view([0,0,0],rightvector,upvector,viewvector)
 
         glUniformMatrix4fv(glGetUniformLocation(self.program, "uVMatrix"), 1, GL_FALSE, view_matrix)
         glUniformMatrix4fv(glGetUniformLocation(self.program, "uMMatrix"), 1, GL_FALSE, model_matrix)
@@ -926,9 +896,6 @@ class depthbuffer():
         glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, texture, 0)
         glDrawBuffer(GL_NONE)
         glReadBuffer(GL_NONE)
-    
-    def asd(self):
-        pass
 
     def active(self):
         glBindFramebuffer(GL_FRAMEBUFFER, self.buffer)
@@ -1015,6 +982,13 @@ while 1:
         maincamera.type=1
     else:
         maincamera.type=0
+        
+    if keys[K_SPACE]:
+        Scene1.ReadScene("./save/Scene1.json")
+        Scene1.Init()
+        Light.lights=Scene1.GetGameObjectsByComponent("Light")
+
+        maincamera=Scene1.GetGameObjectByComponent("Camera").GetComponent("Camera")
         
 
     pygame.display.flip()   

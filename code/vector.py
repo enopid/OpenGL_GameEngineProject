@@ -4,46 +4,6 @@ from OpenGL.GLU import *
 import math
 import numpy as np
 
-def calculate_normal(v1,v2,v3):
-    vector1 = np.array(v2) - np.array(v1)
-    vector2 = np.array(v3) - np.array(v1)
-    cross_product = np.cross(vector1, vector2)
-    normalized_cross_product = cross_product / np.linalg.norm(cross_product)
-    return normalized_cross_product
-
-def rotation_Y(angle,vectorarray):
-    angle = math.radians(angle)
-
-    yaw_rotation_matrix = np.array([[math.cos(angle), 0, math.sin(angle)],
-                                   [0, 1, 0],
-                                   [-math.sin(angle), 0, math.cos(angle)]])
-
-    vectorarray = (np.dot(yaw_rotation_matrix, np.array(vectorarray))).tolist()
-
-    return vectorarray
-
-def rotation_X(angle,vectorarray):
-    angle = math.radians(angle)
-
-    yaw_rotation_matrix = np.array([[1, 0, 0],
-                                   [0,math.cos(angle), -math.sin(angle)],
-                                   [0, math.sin(angle), math.cos(angle)]])
-
-    vectorarray = (np.dot(yaw_rotation_matrix, np.array(vectorarray))).tolist()
-
-    return vectorarray
-
-def rotation_Z(angle,vectorarray):
-    angle = math.radians(angle)
-
-    yaw_rotation_matrix = np.array([[math.cos(angle), -math.sin(angle), 0],
-                                   [math.sin(angle), math.cos(angle), 0],
-                                   [0, 0, 1]])
-
-    vectorarray = (np.dot(yaw_rotation_matrix, np.array(vectorarray))).tolist()
-    
-    return vectorarray
-
 def perspective(fovy, aspect, z_near, z_far):
     f = 1 / math.tan(math.radians(fovy) / 2)
     return np.array([
