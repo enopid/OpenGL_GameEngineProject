@@ -1,7 +1,77 @@
 {
     "lamp" :{
         "Transform" : {
+            "translation" : [5,10,0],
+            "scale" : [0.6,0.6,0.6],
+            "rotation" : [0,45,0]
+        },
+
+        "Mesh" : {
+            "path" : "./model/lamp.obj"
+        },
+
+        "MeshRenderer" : {
+            "shader" : "program1"
+        },
+
+        "Material" : {
+            "type" : "Opaque",
+            "albedo" : {
+                "usetexture" : true,
+                "value" : [1.0,0.0,0.0],
+                "texturepath" : "./texture/lamp.png"
+            },
+            "metalness" : {
+                "usetexture" : true,
+                "value" : 0.2,
+                "texturepath" : "./texture/image.png"
+            },
+            "roughness" : {
+                "usetexture" : true,
+                "value" : 1.0,
+                "texturepath" : "./texture/image.png"
+            }
+        }
+    },
+
+    "lamp2" :{
+        "Transform" : {
             "translation" : [5,0,-5],
+            "scale" : [0.6,0.6,0.6],
+            "rotation" : [0,45,0]
+        },
+
+        "Mesh" : {
+            "path" : "./model/lamp.obj"
+        },
+
+        "MeshRenderer" : {
+            "shader" : "program1"
+        },
+
+        "Material" : {
+            "type" : "Opaque",
+            "albedo" : {
+                "usetexture" : true,
+                "value" : [1.0,0.0,0.0],
+                "texturepath" : "./texture/lamp.png"
+            },
+            "metalness" : {
+                "usetexture" : true,
+                "value" : 0.2,
+                "texturepath" : "./texture/image.png"
+            },
+            "roughness" : {
+                "usetexture" : true,
+                "value" : 1.0,
+                "texturepath" : "./texture/image.png"
+            }
+        }
+    },
+
+    "lamp3" :{
+        "Transform" : {
+            "translation" : [5,0,5],
             "scale" : [0.6,0.6,0.6],
             "rotation" : [0,45,0]
         },

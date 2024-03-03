@@ -89,6 +89,7 @@ class Scene:
         self.objectlist=[]
         self.keys=None
         self.curLog=None
+        self.textureManager=TextureManager()
         if filepath!=None:
             self.ReadScene(filepath)
     
@@ -98,11 +99,12 @@ class Scene:
             jsonData=json.load(f)
             for OBJname in jsonData:
                 gameobject=GameObject(OBJname)
+                self.AddGameObject(gameobject)
                 for componentname in jsonData[OBJname]:
                     data=jsonData[OBJname][componentname]
-                    temp=eval("{}(data)".format(componentname))
+                    temp=eval("{}()".format(componentname))
                     gameobject.AddComponent(temp)
-                self.AddGameObject(gameobject)
+                    temp.ReadData(data)
     
     def RenderScene(self):
         self.ClearScene()
@@ -161,12 +163,78 @@ class Scene:
             os.system('cls')
             print(*temp,sep="\n")
             self.curLog=temp
+            
+class Texture:
+    ID=0
+    
+    def __init__(self,texture,textureManager):
+        self.id=Texture.ID
+        Texture.ID+=1
+        self.texture=texture
+        self.currentSlotnum=-1
+        self.textureManager=textureManager
+    
+    def DisActivate(self):
+        self.currentSlotnum=-1
+    
+    def Activate(self):
+        if self.currentSlotnum==-1:
+            self.currentSlotnum=self.textureManager.Allocate(self)
+        glActiveTexture(GL_TEXTURE0+self.currentSlotnum)
+        glBindTexture(GL_TEXTURE_2D, self.texture)
+    
+    def GetSlotNum(self):
+        self.Activate()
+        return self.currentSlotnum
+
+class TextureManager:
+                 
+    def __init__(self) -> None:
+        self.maxSlotnum=32
+        self.textures=[None for _ in range(self.maxSlotnum)]
+        self.lifetime=[0 for _ in range(self.maxSlotnum)]
+        
+    def createTexture(self,texture)->Texture:
+        return Texture(texture,self)
+    
+    def Allocate(self,texture)->int:
+        index=self.FindEmpty()
+
+        if index==-1:
+            index=self.FindOldOne()
+            self.Free(index)
+            
+        self.textures[index]=texture
+        return index
+    
+    def Free(self,index):
+        self.textures[index].DisActivate()
+        self.textures[index]=None
+        self.lifetime[index]=0
+    
+    def FindEmpty(self)->int:
+        for i in range(self.maxSlotnum):
+            if self.textures[i]==None:
+                return i
+        return -1
+    
+    def FindOldOne(self)->int:
+        self.UpdateLifetime()
+        maxv=0
+        maxindex=0
+        for i in range(self.maxSlotnum):
+            if maxv<self.lifetime[i]:
+                maxv=self.lifetime[i]
+                maxindex=i
+        return maxindex
+    
+    def UpdateLifetime(self):
+        for i in range(self.maxSlotnum):
+            self.lifetime[i]+=1
 
 class Component:
     def __init__(self,data):
         self.gameobject:GameObject=None
-        if data!=None:
-            self.ReadData(data)
     
     def ReadData(self,data):
         pass
@@ -327,7 +395,7 @@ class MeshRenderer(Component):
 
     def Update(self):
         glUseProgram(self.program)
-        self.Material.UpdateMaterial()
+        #self.Material.UpdateMaterial()
         
         glUniform1i(glGetUniformLocation(self.program, "uSkyboxTexture"), 20)
 
@@ -352,7 +420,7 @@ class MeshRenderer(Component):
             glUniform3fv(color,1, light.color)
             glUniformMatrix4fv(lightSpaceMatrix, 1, GL_FALSE, light.GetLightSpaceMatrix())
             if i==0:
-                glUniform1i(shadowmap, 25)
+                glUniform1i(shadowmap, light.shadowbuffer.texture.GetSlotNum())
             else:
                 glUniform1i(shadowmap, 26)
 
@@ -362,7 +430,8 @@ class MeshRenderer(Component):
         
         cameralocation = glGetUniformLocation(self.program, "uCameraPos")
         glUniform3fv(cameralocation, 1, self.camera.gameobject.transform.GetPos())
-
+        self.Material.UpdateMaterial()
+        
         glDrawArrays(GL_TRIANGLES, 0, len(self.mesh.mesh.vertices))
     
     def testdraw(self):
@@ -447,6 +516,7 @@ class Light(Component):
         self.color=(1,1,1)
         self.intensity=1
         self.lights=[]
+        self.shadowbuffer:depthbuffer=None
         super().__init__(data)
 
     def Init(self):
@@ -555,8 +625,7 @@ class Material(Component):
             self.useTexture=False
             self.value=value
             self.texturePath=None
-            self.textureID=Material.ID
-            Material.ID+=1
+            self.texture=None
 
     def __init__(self, data=None):
         self.type="Opaque"
@@ -593,26 +662,25 @@ class Material(Component):
     def SetProgram(self,program):
         self.program=program
     
-    def LoadTexture(self,filename):
+    def LoadTexture(self,material,filename):
         img = Image.open(filename, 'r').convert("RGBA")
         img_data = np.array(img, dtype=np.uint8)
         w, h = img.size
 
-        texture = glGenTextures(1)
-
-        glBindTexture(GL_TEXTURE_2D, texture)
+        
+        glBindTexture(GL_TEXTURE_2D, material.texture.texture)
 
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST)
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST)
         
         glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, w, h, 0, GL_RGBA, GL_UNSIGNED_BYTE, img_data)
-
-        return texture
     
     def BindTexture(self, name, path):
         material=self.materialProperties[Material.materialTable[name]]
-        glActiveTexture(GL_TEXTURE0+material.textureID)
-        self.LoadTexture(path)
+        texture = glGenTextures(1)
+        material.texture=self.gameobject.scene.textureManager.createTexture(texture)
+        material.texture.Activate()
+        self.LoadTexture(material,path)
 
         material.useTexture=True
         material.texturePath=path
@@ -620,14 +688,13 @@ class Material(Component):
     def SetTexture(self, name, path):
         glUseProgram(self.program)
         self.BindTexture(name, path)
-        material=self.materialProperties[Material.materialTable[name]]
 
         self.UpdateTexture(name)
     
     def UpdateTexture(self,name):
         material=self.materialProperties[Material.materialTable[name]]
         glUniform1i(glGetUniformLocation(self.program, "uMaterials[{}].useTexture".format(Material.materialTable[name])), material.useTexture)
-        glUniform1i(glGetUniformLocation(self.program, "uMaterials[{}].texture".format(Material.materialTable[name])), material.textureID)
+        glUniform1i(glGetUniformLocation(self.program, "uMaterials[{}].texture".format(Material.materialTable[name])), material.texture.GetSlotNum())
 
     def SetValue(self, name, value):
         glUseProgram(self.program)
@@ -839,24 +906,19 @@ class SkyBoxRender(Component):
         return texture  
 
 class FrameBuffer():
-    offset=22
-    num=0
-
-    def __init__(self):
+    def __init__(self,scene:Scene):
         self.buffer=glGenFramebuffers(1)
+        self.scene=scene
+        
+        texture=glGenTextures(1)
+        self.texture=self.scene.textureManager.createTexture(texture)
         self.active()
 
-        glActiveTexture(GL_TEXTURE0+FrameBuffer.offset+FrameBuffer.num)
-        self.ID=FrameBuffer.offset+FrameBuffer.num
-        FrameBuffer.num+=1
-
-        texture=glGenTextures(1)
-        glBindTexture(GL_TEXTURE_2D, texture)
         glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, width, height, 0, GL_RGB, GL_UNSIGNED_BYTE, [])
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST)
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST)
         
-        glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, texture, 0)
+        glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, self.texture.texture, 0)
     
     def InitRenderBuffer(self):
         self.active()
@@ -867,24 +929,21 @@ class FrameBuffer():
         glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_STENCIL_ATTACHMENT, GL_RENDERBUFFER, rbo)
 
     def active(self):
+        self.texture.Activate()
         glBindFramebuffer(GL_FRAMEBUFFER, self.buffer)
 
 class depthbuffer():
-    offset=25
-    num=0
-
-    def __init__(self):
+    def __init__(self,scene):
         self.buffer=glGenFramebuffers(1)
+        self.scene=scene
+        
+        texture=glGenTextures(1)
+        self.texture=self.scene.textureManager.createTexture(texture)
         self.active()
-
-        glActiveTexture(GL_TEXTURE0+depthbuffer.offset+depthbuffer.num)
-        self.ID=depthbuffer.offset+depthbuffer.num
-        depthbuffer.num+=1
+        
         self.SHADOW_WIDTH=1024
         self.SHADOW_HEIGHT=1024
-
-        texture=glGenTextures(1)
-        glBindTexture(GL_TEXTURE_2D, texture)
+        
         glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT, self.SHADOW_WIDTH, self.SHADOW_HEIGHT, 0, GL_DEPTH_COMPONENT, GL_FLOAT, []);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST)
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST)
@@ -893,11 +952,12 @@ class depthbuffer():
         borderColor = [1.0, 1.0, 1.0, 1.0]
         glTexParameterfv(GL_TEXTURE_2D, GL_TEXTURE_BORDER_COLOR, borderColor)
         
-        glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, texture, 0)
+        glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, self.texture.texture, 0)
         glDrawBuffer(GL_NONE)
         glReadBuffer(GL_NONE)
 
     def active(self):
+        self.texture.Activate()
         glBindFramebuffer(GL_FRAMEBUFFER, self.buffer)
     
 def drawscreen(shader, textureslot):
@@ -934,21 +994,24 @@ def drawscreen(shader, textureslot):
     glDrawArrays(GL_TRIANGLES, 0, 6)
     
     glEnable(GL_DEPTH_TEST)
+    
+Scene1=Scene("./save/Scene1.json")
 
-testbuffer=FrameBuffer()
+testbuffer=FrameBuffer(Scene1)
 testbuffer.InitRenderBuffer()
 
-testbuffer2=FrameBuffer()
+testbuffer2=FrameBuffer(Scene1)
 testbuffer2.InitRenderBuffer()
 
-shadowbuffer=depthbuffer()
+shadowbuffer=depthbuffer(Scene1)
 
 glBindFramebuffer(GL_FRAMEBUFFER, 0)
 
-Scene1=Scene("./save/Scene1.json")
+
 
 Scene1.Init()
 Light.lights=Scene1.GetGameObjectsByComponent("Light")
+Light.lights[0].GetComponent("Light").shadowbuffer=shadowbuffer
 
 maincamera=Scene1.GetGameObjectByComponent("Camera").GetComponent("Camera")
 
@@ -972,11 +1035,11 @@ while 1:
 
     keys = pygame.key.get_pressed()
     if keys[K_TAB]:
-        drawscreen(screenprogram,23)
+        drawscreen(screenprogram,testbuffer2.texture.GetSlotNum())
     elif keys[K_LSHIFT]:
-        drawscreen(screenprogram,25)
+        drawscreen(screenprogram,shadowbuffer.texture.GetSlotNum())
     else:
-        drawscreen(screenprogram,22)
+        drawscreen(screenprogram,testbuffer.texture.GetSlotNum())
     
     if keys[K_1]:
         maincamera.type=1
