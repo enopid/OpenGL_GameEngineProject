@@ -14,8 +14,6 @@ def perspective(fovy, aspect, z_near, z_far):
     ])
 
 def view(pos, u, v, w):
-    if u==[]:
-        u=np.cross(v,w)
     
     rotation=np.array([
         [   u[0], v[0],     w[0],  0],
