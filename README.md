@@ -50,7 +50,7 @@
 ### Mode2
 > IOR 수치를 조절하며 매테리얼의 특징을 확인가능한 모드이다.
 > 왼쪽으로 갈수록 metalness가 커지고 아래로갈수록 loughness가 커진다.
-> 하단의 영상은 IOR 수치를 점진적으로 조절한 여상이다. 
+> 하단의 영상은 IOR 수치를 점진적으로 조절한 영상이다. 
 
 https://github.com/user-attachments/assets/4b7e3d28-7989-47c2-b70f-4e800d090851
 
