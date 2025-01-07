@@ -5,7 +5,7 @@
 ### **PBR and Mesh Implementation**
 |<img src="https://github.com/user-attachments/assets/60c6e663-cb7a-4b38-89d9-1e0a815e13ae" alt="" width="400" height="300" style="margin:0; padding:0;">| <img src="https://github.com/user-attachments/assets/64885aef-bcb3-4e02-b5be-fb8efe359a14" alt="" width="400" height="300" style="margin:0; padding:0;">|
 |:-----------------:|:----------------:|
-|mode1 Ingame|mode3 |
+|mode1 Ingame|mode3 architecture|
 
 - 본 프로젝트는 mesh와 texture를 렌더링하는 과정과 PBR을 GLSL을 직접작성하여 구현한 데모 게임엔진 입니다.
 - 기본적인 렌더링구현과 간단한 이동을 지원하고 cmd를 통해 현재적용된 패러미터의 수치를 확인가능합니다.
