@@ -1,5 +1,4 @@
 # OpenGL_GameEngineProject
-- OpenGL_GameEngineProject
 
 ## 프로젝트 개요
 
