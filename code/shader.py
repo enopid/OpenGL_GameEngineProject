@@ -23,7 +23,6 @@ vertex_shader_source = """
     }
     """
 
-# using texture shadowmap of Light(num of light) / Material texture(Num of Materials) / skyboxtexture
 fragment_shader_source ="""
     #version 330 core
     #define NUM_LIGHTS 4
@@ -89,10 +88,6 @@ fragment_shader_source ="""
             shadow=0.0;
 
         return shadow;
-    }
-
-    vec3 CalculateLight(Light light){
-        if (Light.type==)
     }
     
     void init(){   

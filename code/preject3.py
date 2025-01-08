@@ -27,6 +27,12 @@ screenprogram = shader.initscreenprogram()
 skyboxprogram = shader.initSkyboxprogram()
 shadowprogram = shader.initshadowprogram()
 
+object1 = OBJ("./model/testsphere2.obj", swapyz=False)
+object2 = OBJ("./model/testsphere1.obj", swapyz=False)
+object3 = OBJ("./model/lamp.obj", swapyz=False)
+skyboxobj = OBJ("./model/cube.obj", swapyz=False)
+lightobj = OBJ("./model/light.obj", swapyz=False)
+
 glViewport(0, 0, width, height)
 
 glEnable(GL_DEPTH_TEST)
@@ -184,7 +190,7 @@ class Texture:
 class TextureManager:
                  
     def __init__(self) -> None:
-        self.maxSlotnum=8
+        self.maxSlotnum=32
         self.textures=[None for _ in range(self.maxSlotnum)]
         self.lifetime=[0 for _ in range(self.maxSlotnum)]
         
@@ -368,10 +374,8 @@ class MeshRenderer(Component):
                 light=self.lights[i].GetComponent("Light")
                 pos=glGetUniformLocation(self.program, "uLights[{}].position".format(i))
                 color=glGetUniformLocation(self.program, "uLights[{}].color".format(i))
-                type=glGetUniformLocation(self.program, "uLights[{}].type".format(i))
                 glUniform3fv(pos,1, light.gameobject.transform.GetPos())
                 glUniform3fv(color,1, light.color)
-                glUniform1i(type,1,light.type)
 
     def GetMesh(self):
         if self.gameobject and (temp:=self.gameobject.GetComponent("Mesh")):
@@ -391,7 +395,7 @@ class MeshRenderer(Component):
 
     def Update(self):
         glUseProgram(self.program)
-        self.Material.UpdateMaterial()
+        #self.Material.UpdateMaterial()
         
         glUniform1i(glGetUniformLocation(self.program, "uSkyboxTexture"), 20)
 
@@ -408,14 +412,12 @@ class MeshRenderer(Component):
             light=self.lights[i].GetComponent("Light")
             pos=glGetUniformLocation(self.program, "uLights[{}].position".format(i))
             color=glGetUniformLocation(self.program, "uLights[{}].color".format(i))
-            type=glGetUniformLocation(self.program, "uLights[{}].type".format(i))
             lightSpaceMatrix=glGetUniformLocation(self.program, "uLights[{}].uLightSpaceMatrix".format(i))
             shadowmap=glGetUniformLocation(self.program, "uLights[{}].shadowMap".format(i))
             
             
             glUniform3fv(pos,1, light.gameobject.transform.GetPos())
             glUniform3fv(color,1, light.color)
-            glUniform1i(type,1,light.type)
             glUniformMatrix4fv(lightSpaceMatrix, 1, GL_FALSE, light.GetLightSpaceMatrix())
             if i==0:
                 glUniform1i(shadowmap, light.shadowbuffer.texture.GetSlotNum())
@@ -428,6 +430,7 @@ class MeshRenderer(Component):
         
         cameralocation = glGetUniformLocation(self.program, "uCameraPos")
         glUniform3fv(cameralocation, 1, self.camera.gameobject.transform.GetPos())
+        self.Material.UpdateMaterial()
         
         glDrawArrays(GL_TRIANGLES, 0, len(self.mesh.mesh.vertices))
     
@@ -509,7 +512,7 @@ class Light(Component):
     lights=[]
     
     def __init__(self, data=None):
-        self.type=-1
+        self.type=None
         self.color=(1,1,1)
         self.intensity=1
         self.lights=[]
@@ -524,17 +527,14 @@ class Light(Component):
         self.gameobject.GetComponent("Material").SetProgram(testprogram)
         self.gameobject.GetComponent("Material").SetTexture("albedo", "./icon/icon_light.png")
         
-        if self.type==0:
+        if self.type=="directional":
             self.gameobject.AddComponent(Mesh())
             self.gameobject.GetComponent("Mesh").SetMesh(OBJ("./model/arrow.obj", swapyz=False))
             self.gameobject.AddComponent(MeshRenderer())
             self.gameobject.GetComponent("MeshRenderer").SetProgram(OpaqueShader)
             
     def ReadData(self, data):
-        if data["type"]=="directional":
-            self.type=0
-        elif data["type"]=="point":
-            self.type=1
+        self.type=data["type"]
         self.color=data["color"]
         self.intensity=data["intensity"]
             
@@ -556,9 +556,9 @@ class Light(Component):
         
         for gameobject in Light.lights:
             light=gameobject.GetComponent("Light")
-            if light.type==1:
+            if light.type=="point":
                 light.Pointlightshadowcasting()
-            if light.type==0:
+            if light.type=="directional":
                 light.Directionallightshadowcasting()
         
         glViewport(0, 0, width, height)
@@ -574,12 +574,12 @@ class Light(Component):
     
     def GetLightSpaceMatrix(self):
         lightSpaceMatrix=np.identity(4)
-        if self.type==0:
+        if self.type=="directional":
             lightProjection = orthogonal(-10,10,-10,10, 0.1, 40)
             u,v,w=self.gameobject.transform.GetUVWVector()
             lightView=view(self.gameobject.transform.GetPos(),u,v,w)
             lightSpaceMatrix=np.dot(lightView,lightProjection)
-        elif self.type==1:
+        elif self.type=="point":
             pass
         return lightSpaceMatrix
         
