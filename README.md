@@ -2,7 +2,7 @@
 
 ## 프로젝트 개요
 
-### **PBR and Mesh Implementation**
+### **Component Pattern based Engine Implementation**
 |<img src="https://github.com/user-attachments/assets/c7b163e8-78bb-458e-98b3-e4e23449ced5" alt="" width="400" height="300" style="margin:0; padding:0;">|
 |:-----------------:|
 |mode1 Ingame|
